@@ -11,7 +11,7 @@ Repo for SIP final project for QSS20 focused on protecting legal rights of H-2 w
 
   - Data download link: https://enfxfr.dol.gov/data_catalog/WHD/whd_whisard_20210127.csv.zip
   - Rough summary: contains ~309681 compliance-related actions (not limited to H2 program) beginning in FY2005
-  - Static file in `data/whd_whisard.csv` (pulled in March 2021)
+  - Documentation in `data/documentation/whd_data_dictionary.csv`
 
 
 
