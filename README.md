@@ -15,7 +15,7 @@ Repo for SIP final project for QSS20 focused on protecting legal rights of H-2 w
 
 ## Details on data
 
-### DOL Quarterly Disclosure & Scraped Data
+### TRLA's Merged Dataset: Quarterly Disclosure & Scraped Data
 
 - job_central parts 1 and 2 contain data for every clearance order submitted to DOL, for both the H-2A and H-2B visa programs. Each clearance order is for a primary job, but can contain multiple worksites and multiple housing locations (see below)
   
