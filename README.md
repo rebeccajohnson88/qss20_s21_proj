@@ -19,20 +19,20 @@ Repo for SIP final project for QSS20 focused on protecting legal rights of H-2 w
 
 Relevant links:
 
-- Can be found in [this folder](https://github.com/rebeccajohnson88/qss20_s21_proj/tree/main/data).
-- Data dictionary for DOL-only fields are [here](https://www.dol.gov/sites/dolgov/files/ETA/oflc/pdfs/H-2A_Record_Layout_FY2021_Q1.pdf)
-- Data dictionary for scraper-only fields are [here](https://www.dol.gov/sites/dolgov/files/ETA/oflc/pdfs/H-2A_Record_Layout_FY2021_Q1.pdf)
+- Static data can be found in [this folder](https://github.com/rebeccajohnson88/qss20_s21_proj/tree/main/data).
+- Data dictionary for DOL-only fields is [here](https://www.dol.gov/sites/dolgov/files/ETA/oflc/pdfs/H-2A_Record_Layout_FY2021_Q1.pdf).
+- Data dictionary for scraper-only fields is [here](https://www.dol.gov/sites/dolgov/files/ETA/oflc/pdfs/H-2A_Record_Layout_FY2021_Q1.pdf).
 
 Background: 
 
-- job_central parts 1 and 2 contain data for every clearance order submitted to DOL, for both the H-2A and H-2B visa programs. Each clearance order is for a primary job, but can contain multiple worksites and multiple housing locations (see below)
+- job_central parts 1 and 2 contain data for every clearance order submitted to DOL, for both the H-2A and H-2B visa programs. Each clearance order is for a primary job, but can contain multiple worksites and multiple housing locations (see below).
   
-  - Disclosure data: Data on job postings released every quarter of a fiscal year
+  - Disclosure data: Data on job postings released every quarter of a fiscal year.
   - Scraped data: In the interim between these data releases, we scrape the DOL site to see who is requesting H-2A or H-2B certification in real time.
 
-- additional_housing contains all the data for the additional housing locations associated with a single clearance order
-- additioanl_worksite contains all data for additional work locations associated with a single clearance order
-- both ^ can be linked together with the Case Number
+- additional_housing contains all the data for the additional housing locations associated with a single clearance order.
+- additioanl_worksite contains all data for additional work locations associated with a single clearance order.
+- both ^ can be linked together with the Case Number.
 
 ### DOL WHD data
 
