@@ -17,6 +17,14 @@ Repo for SIP final project for QSS20 focused on protecting legal rights of H-2 w
 
 ### TRLA's Merged Dataset: Quarterly Disclosure & Scraped Data
 
+Relevant links:
+
+- Can be found in [this folder](https://github.com/rebeccajohnson88/qss20_s21_proj/tree/main/data).
+- Data dictionary for DOL-only fields are [here](https://www.dol.gov/sites/dolgov/files/ETA/oflc/pdfs/H-2A_Record_Layout_FY2021_Q1.pdf)
+- Data dictionary for scraper-only fields are [here](https://www.dol.gov/sites/dolgov/files/ETA/oflc/pdfs/H-2A_Record_Layout_FY2021_Q1.pdf)
+
+Background: 
+
 - job_central parts 1 and 2 contain data for every clearance order submitted to DOL, for both the H-2A and H-2B visa programs. Each clearance order is for a primary job, but can contain multiple worksites and multiple housing locations (see below)
   
   - Disclosure data: Data on job postings released every quarter of a fiscal year
