@@ -1,17 +1,35 @@
 # Repo for QSS20 final project
 Repo for SIP final project for QSS20 focused on protecting legal rights of H-2 workers
 
+## Current scripts
+
+- [00_explore_WHD_data.ipynb](https://github.com/rebeccajohnson88/qss20_s21_proj/blob/main/code/00_explore_WHD_data.ipynb)
+  - Takes in: most current WHD violations data
+  - What it does: basic descriptives on fields, patterns over time, employers
+
+- [01_explorequarterly.ipynb](https://github.com/rebeccajohnson88/qss20_s21_proj/blob/main/code/01_explorequarterly.ipynb)
+  - Takes in: DOL quarterly jobs data (just FY2021 Q1; needs expansion to other quarters/years)
+  - What it does: looks at total h2a workers certified in TRLA catchment areas
+
+- [02_extract_debarment_data.ipynb](https://github.com/rebeccajohnson88/qss20_s21_proj/blob/main/code/02_extract_debarment_data.ipynb)
+  - Takes in: PDFs of debarments released by DOL
+  - What it does: parses the PDFs using `tabula`; writes csv if activated
+
+
+
 ## Directory structure
 
 - [background_reading](https://github.com/rebeccajohnson88/qss20_s21_proj/tree/main/background_reading): contains background readings on (1) the H-2 program, (2) legal rights visa holders have, (3) evidence of violations of those rights
 
-## Links to data sources
+## Links to external data sources
 
 - DOL Wages and Hour Division (WHD) compliance data: https://enforcedata.dol.gov/views/data_summary.php 
 
   - Data download link: https://enfxfr.dol.gov/data_catalog/WHD/whd_whisard_20210127.csv.zip
   - Rough summary: contains ~309681 compliance-related actions (not limited to H2 program) beginning in FY2005
   - Documentation in `data/documentation/whd_data_dictionary.csv`
+
+- OPM staffing data (potentially useful for WHD staffing patterns)- https://www.fedscope.opm.gov/ 
 
 ## Details on data
 
