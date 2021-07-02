@@ -11,6 +11,19 @@
 library(dplyr)
 library(stringr)
 library(fastLink)
+##########################
+# This code fuzzy matches between H2A applications data and the WHD investigations data
+# Author: Cam Guage 
+# Written: 6/29/2021
+##########################
+
+##########################
+# Packages and Imports
+##########################
+
+library(dplyr)
+library(stringr)
+library(fastLink)
 library(readr)
 
 ########################
@@ -53,7 +66,7 @@ standardize_colnames <- function(data, cw_file = matchvars_crosswalk){
 #####################
 
 ## function to generate matches using fastlink and to save a copy/return
-generate_save_matches <- function(dbase1, dbase2, matchVars, blockVar, string_threshold){
+generate_save_matches <- function(dbase1, dbase2, matchVars, string_threshold){
   
   matches.out <- fastLink(dfA = dbase1,
                           dfB = dbase2,
@@ -62,7 +75,7 @@ generate_save_matches <- function(dbase1, dbase2, matchVars, blockVar, string_th
                           partial.match = matchVars,
                           verbose = TRUE,
                           cut.a = threshold)
-  saveRDS(matches.out, sprintf("../../intermediate/matchresults.RDS", blockVar))
+  saveRDS(matches.out, "intermediate/matchresults.RDS")
   return(matches.out)
   
 }
@@ -80,8 +93,56 @@ merge_matches <- function(dbase1, dbase2, match_object){
   return(merged_data)
 }
 
+# load in h2a data
+h2a <- read.csv("intermediate/h2a_combined_2014-2021.csv")
+
 # load in investigations/violations data
-investigations <- read.csv("raw/whd_whisard.csv")
+investigations <- read.csv("raw/whd_whisard.csv") # downloaded rather than scraped, should I be scraping instead?
 
-# what is other dataset?
+# use the find status function and put into a new column
+h2a <- h2a %>%
+  mutate(status = find_status(CASE_STATUS)) # RStudio is taking forever to view so hard for me to tell if this worked
 
+# filter to applications that have received certification or partial certification
+approved_only <- h2a %>%
+  filter(status == "CERTIFICATION" | status == "PARTIAL CERTIFICATION") # this is not working (0 observationsr registering)
+
+# make new "name" columns for the cleaned versions of the names
+approved_only <- approved_only %>%
+  mutate(name = clean_names(EMPLOYER_NAME))
+
+investigations <- investigations %>%
+  mutate(name = clean_names(legal_name))
+
+investigations_cleaned <- investigations %>%
+  filter(name != "NAN") # should I do this or is.na()
+
+# prob should filter to get only investigations after 2014. What does ld_dt mean
+
+# Clean up the city names
+approved_only <- approved_only %>%
+  mutate(city = toupper(EMPLOYER_CITY))
+
+investigations_cleaned <- investigations_cleaned %>%
+  mutate(city = toupper(cty_nm))
+
+
+for (state in investigations_cleaned$st_cd) {
+  
+  # create temporary datasets to fuzzy match on
+  approved_only_temp <- approved_only %>%
+    filter(WORKSITE_STATE == state) # EMPLOYER_STATE or WORKSITE_STATE?
+  
+  investigations_cleaned_temp <- investigations_cleaned %>%
+    filter(st_cd == state)
+  
+  matches.out <- generate_save_matches(dbase1 = approved_only_temp,
+                                       dbase2 = investigations_cleaned_temp,
+                                       matchVars = c(name, city),
+                                       string_threshold = .85)
+  
+  merging <- merge_matches(dbase1 = approved_only_temp,
+                           dbase2 = investigations_cleaned_temp,
+                           match_object = matches.out)
+  
+}
