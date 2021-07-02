@@ -7,11 +7,12 @@
 ##########################
 # Packages and Imports
 ##########################
-
+rm(list = ls())
 library(dplyr)
 library(stringr)
 library(fastLink)
 library(readr)
+library(data.table)
 
 ########################
 # User-defined functions 
@@ -20,7 +21,7 @@ library(readr)
 ## function to pull out certification status from a given h2a application
 find_status <- function(one){
   
-  string_version <- toString(one) # convert to string
+  string_version <- toString(toupper(one)) # convert to string
   pattern <- '\\-\\s(.*)$'
   found <- str_extract(string_version, pattern)
   return(found)
@@ -35,6 +36,7 @@ clean_names <- function(one){
   pattern <- "(LLC|CO|INC)\\." # locate the LLC, CO, or INC that are followed by a period
   replacement <- '/1' # replace the whole pattern with the LLC/CO/INC component
   res <- str_replace_all(upper_only, pattern, replacement)
+  #print(class(res)) 
   return(res)
   
 }
@@ -84,28 +86,35 @@ merge_matches <- function(dbase1, dbase2, match_object){
 h2a <- read.csv("intermediate/h2a_combined_2014-2021.csv")
 
 # load in investigations/violations data
-investigations <- read.csv("raw/whd_whisard.csv") # downloaded rather than scraped, should I be scraping instead?
+investigations <- fread("raw/whd_whisard.csv") # downloaded rather than scraped, should I be scraping instead?
 
 # use the find status function and put into a new column
-h2a <- h2a %>%
-  mutate(status = find_status(CASE_STATUS)) # RStudio is taking forever to view so hard for me to tell if this worked
+status = unlist(lapply(h2a$CASE_STATUS, find_status))
+h2a$status_cleaned = status
 
 # filter to applications that have received certification or partial certification
+# that is not expired
 approved_only <- h2a %>%
-  filter(status == "CERTIFICATION" | status == "PARTIAL CERTIFICATION") # this is not working (0 observationsr registering)
+  filter(status_cleaned == "- CERTIFICATION" | status_cleaned == "- PARTIAL CERTIFICATION") # this is not working (0 observationsr registering)
+sprintf("After filtering to approved only, we go from %s rows to %s rows",
+        nrow(h2a),
+        nrow(approved_only))
+table(approved_only$status_cleaned)
 
 # make new "name" columns for the cleaned versions of the names
-approved_only <- approved_only %>%
-  mutate(name = clean_names(EMPLOYER_NAME))
+# rj note: this was causing issues in original form/pasting together
+# all names so apply using lapply which returns a list and then unlist
+# converts that to a vecotor
+emp_name_app = unlist(lapply(approved_only$EMPLOYER_NAME, clean_names))
+approved_only$name <- emp_name_app  
 
-investigations <- investigations %>%
-  mutate(name = clean_names(legal_name))
+emp_name_i =  unlist(lapply(investigations$legal_name, clean_names))
+investigations$name <- emp_name_i 
 
 investigations_cleaned <- investigations %>%
-  filter(name != "NAN") # should I do this or is.na()
+  filter(name != "NAN") # should I do this or is.na()- rj note- i think if nan is appearing fine to filter out the string
 
-# prob should filter to get only investigations after 2014. What does ld_dt mean
-
+## rj stopped here
 # Clean up the city names
 approved_only <- approved_only %>%
   mutate(city = toupper(EMPLOYER_CITY))
