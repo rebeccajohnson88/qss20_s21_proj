@@ -44,8 +44,8 @@ ACS_PREDICTORS_FILENAME = "predictors_acs_varname.csv"
 ACS_PREDICTORS_PATHNAME = os.path.join(DROPBOX_INT_PATH,
                                        ACS_PREDICTORS_FILENAME)
 print(ACS_PREDICTORS_PATHNAME)
-ACS_WRITEFOLDER = os.path.join(DROPBOX_RAW_PATH, "ACS_TRACT_DEMOGRAPHICS")
-TESTING_PULL = True 
+ACS_WRITEFOLDER = os.path.join(DROPBOX_RAW_PATH, "ACS_TRACT_DEMOGRAPHICS/")
+TESTING_PULL = False
 
 
 
@@ -116,7 +116,7 @@ all_dem = demographics(variables_list, fips_list = fips_list)
 end_pull = time.time()
 print("finished pull at: " + str(end_pull))
 
-all_dem.to_pickle(ACS_WRITEFOLDER + "acs_dem_year" + str(YEAR) + ".pkl")
+all_dem.to_pickle(ACS_WRITEFOLDER + "acs_dem_year_" + str(YEAR) + ".pkl")
 print("wrote pull")
 
 
