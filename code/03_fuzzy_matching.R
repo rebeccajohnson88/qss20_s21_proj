@@ -1,7 +1,7 @@
 ##########################
 # This code fuzzy matches between H2A applications data and the WHD investigations data
-# Author: Cam Guage and Rebecca Johnson
-# Written: 7/2/2021
+# Author: Cam Guage 
+# Written: 6/29/2021
 ##########################
 
 ##########################
@@ -13,6 +13,8 @@ library(stringr)
 library(fastLink)
 library(readr)
 library(data.table)
+library(splitstackshape)
+setwd("~/Dropbox (Dartmouth College)/qss20_finalproj_rawdata/summerwork")
 
 ########################
 # User-defined functions 
@@ -117,16 +119,51 @@ approved_only <- approved_only %>%
 investigations_cleaned <- investigations_cleaned %>%
   mutate(city = toupper(cty_nm))
 
+# Create ID variable that repeats across duplicates
+approved_only <- approved_only %>%
+  mutate(name_city_state = sprintf("%s, %s, %s", name, city, EMPLOYER_STATE))
+
+id_vector_1 <-  unique(approved_only$name_city_state)
+
+approved_only <- approved_only %>%
+  mutate(id = match(name_city_state,id_vector_1))
+
+investigations_cleaned <- investigations_cleaned %>%
+  mutate(name_city_state = sprintf("%s, %s, %s", name, city, st_cd))
+
+id_vector_2 <- unique(investigations_cleaned$name_city_state)
+
+investigations_cleaned <- investigations_cleaned %>%
+  mutate(id = match(name_city_state,id_vector_2))
+
+# Deduplicate based on employer name, city, state
+approved_only_dedup <- approved_only %>%
+  distinct(name, city, EMPLOYER_STATE, .keep_all = TRUE)
+
+sprintf("After deduplication, we go from %s rows to %s rows",
+        nrow(approved_only),
+        nrow(approved_only_dedup))
+
+investigations_cleaned_dedup <- investigations_cleaned %>%
+  distinct(name, city, st_cd, .keep_all = TRUE)
+
+sprintf("After deduplication, we go from %s rows to %s rows",
+        nrow(investigations_cleaned),
+        nrow(investigations_cleaned_dedup))
+
+
 #################
 # Driver Function for Fuzzy Matching
 #################
 fuzzy_matching <- function(state){
   
-  # subset datasets to just the desired state
-  approved_only_temp <- approved_only %>%
-    filter(WORKSITE_STATE == state) # EMPLOYER_STATE or WORKSITE_STATE?
+  print(sprintf("Working on %s", state))
   
-  investigations_cleaned_temp <- investigations_cleaned %>%
+  # subset datasets to just the desired state
+  approved_only_temp <- approved_only_dedup %>%
+    filter(EMPLOYER_STATE == state) # EMPLOYER_STATE or WORKSITE_STATE?
+  
+  investigations_cleaned_temp <- as.data.frame(investigations_cleaned_dedup) %>%
     filter(st_cd == state)
   
   # create index variable for merging
@@ -144,10 +181,24 @@ fuzzy_matching <- function(state){
                            dbase2 = investigations_cleaned_temp,
                            match_object = matches.out)
   
+  saveRDS(merging, sprintf("intermediate/fuzzy_matching_%s.RDS", state))
+  
   return(merging)
 }
 
 # run code on 3 random states
-some_states <- sample(unique(investigations_cleaned$st_cd), 3)
-some_states_post_fuzzy <- lapply(some_states, fuzzy_matching)
-some_states_final_df <- do.call(rbind.data.frame, some_states_post_fuzzy)
+all_states <- unique(investigations_cleaned_dedup$st_cd)
+
+# make sure states are in both data sets
+all_states_both <- all_states[(all_states %in% approved_only_dedup$EMPLOYER_STATE)]
+
+# States "MP" and "" throwing an error- I think this is because "MP" only has one row in approved_only_temp... 
+remove <- c("MP", "")
+all_states_both <- all_states_both[!all_states_both %in% remove]
+
+all_states_post_fuzzy <- lapply(all_states_both, fuzzy_matching)
+all_states_final_df <- do.call(rbind.data.frame, all_states_post_fuzzy)
+saveRDS(all_states_final_df, "intermediate/fuzzy_matching_final.RDS")
+        
+# runtime for 3-state sample in RStudio: with cleaning 1:25, just fuzzy 0:38, from screen 1:18
+# runtime for whole thing on screen: 9:05
