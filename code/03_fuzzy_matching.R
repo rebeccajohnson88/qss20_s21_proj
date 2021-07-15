@@ -192,8 +192,10 @@ all_states <- unique(investigations_cleaned_dedup$st_cd)
 # make sure states are in both data sets
 all_states_both <- all_states[(all_states %in% approved_only_dedup$EMPLOYER_STATE)]
 
-# States "MP" and "" throwing an error- I think this is because "MP" only has one row in approved_only_temp... 
-remove <- c("MP", "")
+# States "MP" and "" throwing an error- I think this is because "MP" only has one row in approved_only_temp...
+# Error is "cannot coerce class ‘c("fastLink", "matchesLink")’ to a data.frame" for the 2 states
+# Error is "wrong sign in 'by' argument" for ""
+remove <- c("MP", "", "AK")
 all_states_both <- all_states_both[!all_states_both %in% remove]
 
 all_states_post_fuzzy <- lapply(all_states_both, fuzzy_matching)
@@ -201,4 +203,4 @@ all_states_final_df <- do.call(rbind.data.frame, all_states_post_fuzzy)
 saveRDS(all_states_final_df, "intermediate/fuzzy_matching_final.RDS")
         
 # runtime for 3-state sample in RStudio: with cleaning 1:25, just fuzzy 0:38, from screen 1:18
-# runtime for whole thing on screen: 9:05
+# runtime for whole thing on screen: 9:46
