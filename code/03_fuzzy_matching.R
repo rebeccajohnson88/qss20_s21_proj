@@ -192,8 +192,8 @@ all_states <- unique(investigations_cleaned_dedup$st_cd)
 # make sure states are in both data sets
 all_states_both <- all_states[(all_states %in% approved_only_dedup$EMPLOYER_STATE)]
 
-# States "MP" and "" throwing an error- I think this is because "MP" only has one row in approved_only_temp...
-# Error is "cannot coerce class ‘c("fastLink", "matchesLink")’ to a data.frame" for the 2 states
+# States "MP", "AK", and "" throwing an error- I think this is because "MP" only has one row in approved_only_temp
+# Error is "cannot coerce class ‘c("fastLink", "matchesLink")’ to a data.frame" for "MP" and "AK"
 # Error is "wrong sign in 'by' argument" for ""
 remove <- c("MP", "", "AK")
 all_states_both <- all_states_both[!all_states_both %in% remove]
