@@ -6,12 +6,13 @@ import os
 from os import listdir
 from pathlib import Path
 import re
+import pandas as pd
 import numpy as np
 
 ## file path
 data_raw_dir = '../../qss20_finalproj_rawdata/summerwork/raw/'
 data_id_dir = '../../qss20_finalproj_rawdata/summerwork/intermediate/'
-df_acs_path = data_raw_dir + "ACS_TRACT_DEMOGRAPHICSacs_dem_year2014.pkl"
+df_acs_path = data_raw_dir + "ACS_TRACT_DEMOGRAPHICS/acs_dem_year_2014.pkl"
 df_acs = pd.read_pickle(df_acs_path)
 acs_variable_path = data_id_dir + "predictors_acs_varname.csv"
 acs_variable = pd.read_csv(acs_variable_path)
@@ -23,7 +24,7 @@ acs_variable_forcal['name_edit'] = acs_variable_forcal['name'].astype("string")+
 ## melt to long format
 df_acs_long = pd.melt(df_acs, id_vars=['county', 'state', 'tract']).sort_values(by=['tract', 'county'])
 df_acs_long.replace(to_replace=[None], value=np.nan, inplace=True)
-df_acs_long.shape[0] #13734528 rows
+df_acs_long.shape[0]
 
 ## manually indicate which prefix columns don't follow the pattern
 prefixes_perc_notrelevant = ['B05004_001E','B05004_013E','B05004_014E',"B05004_015E","B06011_001E","B19113_001E","B20004_001E","B22008_001E","B24031_002E","B24041_002E","B24121_017E"]
@@ -39,7 +40,6 @@ df_acs_long.variable.astype("string")
 df_acs_long["maintain"]=np.where(df_acs_long.variable.isin(variable_tokeep),
                                   1, 0)
 df_acs_long=df_acs_long[df_acs_long.maintain==1]
-# df_acs_long.shape[0] #12857856 rows
 
 ## create prefix and suffix columns
 df_acs_long['variable_prefix'], df_acs_long['variable_suffix'] = df_acs_long['variable'].str.split('_', 1).str
@@ -50,11 +50,24 @@ prefixes_perc_extrahier = ['B25026', 'B25123']
 df_acs_long['perc_extrahier'] = np.where(df_acs_long.variable_prefix.isin(prefixes_perc_extrahier),
                                          1, 0)
 
+## Merge on the acs_predictors
+acs_variable_forcal = acs_variable_forcal.rename(columns={'name_edit': 'variable'})
+merged_df_acs = pd.merge(df_acs_long,acs_variable_forcal,on='variable',how='outer')
+
+## post merging cleaning (combining variables' description)
+merged_df_acs.label.astype("string")
+merged_df_acs.concept.astype("string")
+merged_df_acs['label'] = merged_df_acs['label'].str.replace('Estimate!!Total!!', '')
+merged_df_acs.drop(["predictors"], axis=1, inplace=True)
+cols = ['variable', 'label', 'concept']
+merged_df_acs['detailed_varname'] = merged_df_acs[cols].apply(lambda row: '_'.join(row.values.astype(str)), axis=1)
+
 ## group by county, tract, and variable prefix to generate
 ## percentages (and later variable names)
-df_acs_long_toiterate = df_acs_long[df_acs_long.perc_NA == 0].copy()
+df_acs_long_toiterate = merged_df_acs[merged_df_acs.perc_NA == 0].copy()
 group_co_tract_varg = df_acs_long_toiterate.groupby(['county', 'tract', 'variable_prefix'])
 ################################## Generate percentages: auto-calc #################################
+
 
 df_acs_long_percentage = []
 # flag = 0
