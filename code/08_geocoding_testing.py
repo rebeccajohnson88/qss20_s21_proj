@@ -6,6 +6,7 @@ import pandas as pd
 import clients
 from geocodio import GeocodioClient
 import clients
+import datetime
 
 
 
@@ -32,9 +33,13 @@ def handle_null(object):
     if isinstance(object, float):
         if object < 0:
             return ""
-    else:
-        if len(object) == 0:
-            return ""
+    elif isinstance(object, datetime.date):
+        return ""
+    elif isinstance(object, int):
+        if object < 0:
+            return""
+    elif len(object) == 0:
+        return ""
 
     return str(object)
 
@@ -100,7 +105,7 @@ def geocode_table(df, testing=True, test_size=100):
                 longitudes.append(None)
             i += 1
 
-        i = len(df.columns)
+        #i = len(df.columns)
         df_addr[f"geo_lat"] = latitudes
         df_addr[f"geo_long"] = longitudes
         df_addr[f"geo_accuracy"] = accuracies
@@ -120,8 +125,18 @@ print("Read in h2a data...")
 with open(DATA_FILE_PATH, "rb") as df:
   h2a_data = pickle.load(df)
 
+print(len(h2a_data))
+
 # testing
 print("Testing with 100 samples:")
-test_df1 = geocode_table(h2a_data)
+#test_df1 = geocode_table(h2a_data)
 print("Testing with larger samples:")
-test_df2 = geocode_table(h2a_data, test_size=20000) # 10000 samples, time used:  294.22878647100003 sec
+test_df2 = geocode_table(h2a_data, testing=False) # 10000 samples, time used:  294.22878647100003 sec
+
+DATA_SAVE_PATH = "/Users/Firstclass/Dropbox (Dartmouth College)/qss20_finalproj_rawdata/summerwork/intermediate/h2a_combined_2014-2021_geocoded.pkl"
+
+with open(DATA_SAVE_PATH, "wb") as name:
+    pickle.dump(test_df2, name)
+name.close()
+
+test_df2.to_csv("h2a_combined_2014-2021_geocoded.csv", encoding='utf-8', index=False)
