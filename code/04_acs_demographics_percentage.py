@@ -5,54 +5,74 @@ import openpyxl as openpyxl
 import os
 from os import listdir
 from pathlib import Path
-import re
-import pandas as pd
-import numpy as np
+import geopandas as gpd
+from geopandas.tools import sjoin
 
-## file path
-data_raw_dir = '../../qss20_finalproj_rawdata/summerwork/raw/'
-data_id_dir = '../../qss20_finalproj_rawdata/summerwork/intermediate/'
-df_acs_path = data_raw_dir + "ACS_TRACT_DEMOGRAPHICS/acs_dem_year_2014.pkl"
-df_acs = pd.read_pickle(df_acs_path)
-acs_variable_path = data_id_dir + "predictors_acs_varname.csv"
-acs_variable = pd.read_csv(acs_variable_path)
+
+
+## define pathnames
+#dirname = os.path.dirname(__file__)
+#dropbox_general = str(Path(dirname).parents[1])
+dropbox_general = "/Users/rebeccajohnson/Dropbox/"
+DROPBOX_DATA_PATH = os.path.join(dropbox_general, 
+                                "qss20_finalproj_rawdata/summerwork/") 
+DATA_RAW_DIR = os.path.join(DROPBOX_DATA_PATH, "raw/")
+DATA_ID_DIR = os.path.join(DROPBOX_DATA_PATH, "intermediate/")
+DF_ACS_PATH = os.path.join(DATA_RAW_DIR, "ACS_TRACT_DEMOGRAPHICS/acs_dem_year_2014.pkl")
+ACS_VARIABLE_PATH = os.path.join(DATA_ID_DIR, "predictors_acs_varname.csv")
+H2AJOBS_TRACTS = os.path.join(DATA_ID_DIR, "h2a_tract_intersections.pkl")
+print(H2AJOBS_TRACTS)
+
+
+## read in data
+df_acs = pd.read_pickle(DF_ACS_PATH)
+acs_variable = pd.read_csv(ACS_VARIABLE_PATH)
+
+
+# rj note: error when reading this pkl - see if can have csv or txt
+# file of just the geoids of tracts with some h2ajobs 
+## h2ajobs = pd.read_pickle(H2AJOBS_TRACTS)
+
+print("There are " + str(df_acs.shape[0]) + " rows and " + str(len(df_acs.GEO_ID.unique())) + " unique tracts")
+
+## filter to tracts that have a non_zero count of jobs
+
 
 ## predictors dataset cleaning
-acs_variable_forcal=acs_variable[acs_variable.predictors=="yes"]
-acs_variable_forcal['name_edit'] = acs_variable_forcal['name'].astype("string")+"E"
+## first look at intersection between 
+## the variables and the rownames
+## rj note: changed this from the predictors = yes filtering
+## since not sure if that was used consistently (eg with the new unemployment ones)
+acs_variable['name_edit'] = acs_variable.name.astype(str) + "E" 
+acs_predictors_pulled = set(df_acs.columns).intersection(set(acs_variable.name_edit))
+acs_variable_forcal=acs_variable[acs_variable.name_edit.isin(acs_predictors_pulled)].copy()
 
-## melt to long format
-df_acs_long = pd.melt(df_acs, id_vars=['county', 'state', 'tract']).sort_values(by=['tract', 'county'])
+## melt demographics to long format
+## rj note- added name and geoid here 
+df_acs_long = pd.melt(df_acs, id_vars=['NAME', 'GEO_ID', 
+                                    'county', 'state', 'tract']).sort_values(by=['tract', 'county'])
+
 df_acs_long.replace(to_replace=[None], value=np.nan, inplace=True)
-df_acs_long.shape[0]
 
 ## manually indicate which prefix columns don't follow the pattern
-prefixes_perc_notrelevant = ['B05004_001E','B05004_013E','B05004_014E',"B05004_015E","B06011_001E","B19113_001E","B20004_001E","B22008_001E","B24031_002E","B24041_002E","B24121_017E"]
+varnames_percnotrelevant = ['B05004_001E','B05004_013E','B05004_014E',"B05004_015E","B06011_001E",
+                             "B19113_001E","B20004_001E","B22008_001E","B24031_002E","B24041_002E","B24121_017E"]
 
-## filter acs_variable_forcal to only exclude the predictors relevant
-acs_variable_forcal["keep"]=np.where(acs_variable_forcal.name_edit.isin(prefixes_perc_notrelevant),
-                                  1, 0)
-acs_variable_forcal=acs_variable_forcal[acs_variable_forcal.keep==0]
-variable_tokeep= acs_variable_forcal.name_edit.tolist()
-
-## filter df_acs_long to only retain variables that are predictors
-df_acs_long.variable.astype("string")
-df_acs_long["maintain"]=np.where(df_acs_long.variable.isin(variable_tokeep),
-                                  1, 0)
-df_acs_long=df_acs_long[df_acs_long.maintain==1]
+## create a flag of ones that we want to keep but that
+## percentages are not relevant for
+#acs_variable_forcal["drop_forperc"]=np.where(acs_variable_forcal.name_edit.isin(varnames_percnotrelevant),
+ #                                 1, 0)
 
 ## create prefix and suffix columns
 df_acs_long['variable_prefix'], df_acs_long['variable_suffix'] = df_acs_long['variable'].str.split('_', 1).str
-df_acs_long['perc_NA'] = np.where(df_acs_long.variable_prefix.isin(prefixes_perc_notrelevant),
+df_acs_long['perc_NA'] = np.where(df_acs_long.variable.isin(varnames_percnotrelevant),
                                   1, 0)
 
-prefixes_perc_extrahier = ['B25026', 'B25123']
-df_acs_long['perc_extrahier'] = np.where(df_acs_long.variable_prefix.isin(prefixes_perc_extrahier),
-                                         1, 0)
+## Merge on the ACS names- one didnt match and we're just dropping in inner join since unimportant
+## (something on northern americas)
+merged_df_acs = pd.merge(df_acs_long,acs_variable_forcal,left_on='variable',
+                         right_on = "name_edit", how='inner')
 
-## Merge on the acs_predictors
-acs_variable_forcal = acs_variable_forcal.rename(columns={'name_edit': 'variable'})
-merged_df_acs = pd.merge(df_acs_long,acs_variable_forcal,on='variable',how='outer')
 
 ## post merging cleaning (combining variables' description)
 merged_df_acs.label.astype("string")
@@ -64,8 +84,12 @@ merged_df_acs['detailed_varname'] = merged_df_acs[cols].apply(lambda row: '_'.jo
 
 ## group by county, tract, and variable prefix to generate
 ## percentages (and later variable names)
+## rj note- switched from grouping by county and tract to geoid since that's the most unique
+## might need to drop the county and state columns
 df_acs_long_toiterate = merged_df_acs[merged_df_acs.perc_NA == 0].copy()
-group_co_tract_varg = df_acs_long_toiterate.groupby(['county', 'tract', 'variable_prefix'])
+group_co_tract_varg = df_acs_long_toiterate.groupby(['GEOID', 'variable_prefix'])
+print(merged_df_acs.columns)
+print(df_acs_long_toiterate.head())
 ################################## Generate percentages: auto-calc #################################
 
 
