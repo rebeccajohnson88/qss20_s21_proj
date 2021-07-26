@@ -81,13 +81,21 @@ merge_matches <- function(dbase1, dbase2, match_object){
 h2a <- read.csv("intermediate/h2a_combined_2014-2021.csv")
 
 # load in investigations/violations data
-investigations <- fread("raw/whd_whisard.csv")
-# X <- read.csv(url("http://some.where.net/data/foo.csv"))
+investigations <- fread("raw/enforcement_registration20210720.csv")
 
 
 ################
 # Cleaning the Data
 ################
+
+# filtering to just h2a violations
+investigations_filtered <- investigations %>%
+  filter(`Registration Act` == "H2A")
+
+sprintf("After filtering to H2A violations only, we go from %s rows to %s rows",
+        nrow(investigations),
+        nrow(investigations_filtered))
+  
 
 # use the find status function and put into a new column
 status = unlist(lapply(h2a$CASE_STATUS, find_status))
@@ -106,10 +114,10 @@ table(approved_only$status_cleaned)
 emp_name_app = unlist(lapply(approved_only$EMPLOYER_NAME, clean_names))
 approved_only$name <- emp_name_app  
 
-emp_name_i =  unlist(lapply(investigations$legal_name, clean_names))
-investigations$name <- emp_name_i 
+emp_name_i =  unlist(lapply(investigations_filtered$legal_name, clean_names))
+investigations_filtered$name <- emp_name_i 
 
-investigations_cleaned <- investigations %>%
+investigations_cleaned <- investigations_filtered %>%
   filter(is.na(name) == FALSE) # looks like there are no NA's
 
 # Clean up the city names
@@ -136,21 +144,6 @@ id_vector_2 <- unique(investigations_cleaned$name_city_state)
 investigations_cleaned <- investigations_cleaned %>%
   mutate(id = match(name_city_state,id_vector_2))
 
-# Deduplicate based on employer name, city, state
-approved_only_dedup <- approved_only %>%
-  distinct(name, city, EMPLOYER_STATE, .keep_all = TRUE)
-
-sprintf("After deduplication, we go from %s rows to %s rows",
-        nrow(approved_only),
-        nrow(approved_only_dedup))
-
-investigations_cleaned_dedup <- investigations_cleaned %>%
-  distinct(name, city, st_cd, .keep_all = TRUE)
-
-sprintf("After deduplication, we go from %s rows to %s rows",
-        nrow(investigations_cleaned),
-        nrow(investigations_cleaned_dedup))
-
 
 #################
 # Driver Function for Fuzzy Matching
@@ -160,10 +153,10 @@ fuzzy_matching <- function(state){
   print(sprintf("Working on %s", state))
   
   # subset datasets to just the desired state
-  approved_only_temp <- approved_only_dedup %>%
+  approved_only_temp <- approved_only %>%
     filter(EMPLOYER_STATE == state) # EMPLOYER_STATE or WORKSITE_STATE?
   
-  investigations_cleaned_temp <- as.data.frame(investigations_cleaned_dedup) %>%
+  investigations_cleaned_temp <- as.data.frame(investigations_cleaned) %>%
     filter(st_cd == state)
   
   # create index variable for merging
@@ -187,13 +180,13 @@ fuzzy_matching <- function(state){
 }
 
 # run code on 3 random states
-all_states <- unique(investigations_cleaned_dedup$st_cd)
+all_states <- unique(investigations_cleaned$st_cd)
 
 # make sure states are in both data sets
-all_states_both <- all_states[(all_states %in% approved_only_dedup$EMPLOYER_STATE)]
+all_states_both <- all_states[(all_states %in% approved_only$EMPLOYER_STATE)]
 
-# States "MP", "AK", and "" throwing an error- I think this is because "MP" only has one row in approved_only_temp
-# Error is "cannot coerce class ‘c("fastLink", "matchesLink")’ to a data.frame" for "MP" and "AK"
+# States "MP" and "" throwing an error- I think this is because "MP" only has one row in approved_only_temp...
+# Error is "cannot coerce class ‘c("fastLink", "matchesLink")’ to a data.frame" for the 2 states
 # Error is "wrong sign in 'by' argument" for ""
 remove <- c("MP", "", "AK")
 all_states_both <- all_states_both[!all_states_both %in% remove]
@@ -204,3 +197,20 @@ saveRDS(all_states_final_df, "intermediate/fuzzy_matching_final.RDS")
         
 # runtime for 3-state sample in RStudio: with cleaning 1:25, just fuzzy 0:38, from screen 1:18
 # runtime for whole thing on screen: 9:46
+
+## Deduplicate based on employer name, city, state
+#approved_only_dedup <- approved_only %>%
+  #distinct(name, city, EMPLOYER_STATE, .keep_all = TRUE)
+
+#sprintf("After deduplication, we go from %s rows to %s rows",
+        #nrow(approved_only),
+        #nrow(approved_only_dedup))
+
+#investigations_cleaned_dedup <- investigations_cleaned %>%
+  #distinct(name, city, st_cd, .keep_all = TRUE)
+
+#sprintf("After deduplication, we go from %s rows to %s rows",
+        #nrow(investigations_cleaned),
+        #nrow(investigations_cleaned_dedup))
+
+        
