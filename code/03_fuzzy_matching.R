@@ -14,7 +14,19 @@ library(fastLink)
 library(readr)
 library(data.table)
 library(splitstackshape)
-setwd("~/Dropbox (Dartmouth College)/qss20_finalproj_rawdata/summerwork")
+
+
+RUN_FROM_CONSOLE = FALSE
+if(RUN_FROM_CONSOLE){
+  args <- commandArgs(TRUE)
+  DATA_DIR = args[1]
+} else{
+  DATA_DIR = "~/Dropbox/qss20_finalproj_rawdata/summerwork"
+}
+
+
+setwd(DATA_DIR)
+
 
 ########################
 # User-defined functions 
@@ -94,18 +106,22 @@ h2a$status_cleaned = status
 
 # filter to applications that have received certification or partial certification
 approved_only <- h2a %>%
-  filter(status_cleaned == "- CERTIFICATION" | status_cleaned == "- PARTIAL CERTIFICATION")
+  filter(status_cleaned == "- CERTIFICATION" | status_cleaned == "- PARTIAL CERTIFICATION") %>%
+  filter(EMPLOYER_NAME != "") 
 
-sprintf("After filtering to approved only, we go from %s rows to %s rows",
+sprintf("After filtering to approved only and non-missing names, we go from %s rows to %s rows",
         nrow(h2a),
         nrow(approved_only))
-table(approved_only$status_cleaned)
 
-# filtering to just h2a violations
+
+# filtering to just h2a invetigation or viol- either
+# because the registration act is H2A or bc it finds
+# non-zero h2a viol
 investigations_filtered <- investigations %>%
-  filter(`Registration Act` == "H2A")
+  filter(`Registration Act` == "H2A" |
+           h2a_violtn_cnt > 0) 
 
-sprintf("After filtering to H2A violations only, we go from %s rows to %s rows",
+sprintf("After filtering to H2A investigations only, we go from %s rows to %s rows",
         nrow(investigations),
         nrow(investigations_filtered))
 
@@ -117,34 +133,16 @@ approved_only$name <- emp_name_app
 emp_name_i =  unlist(lapply(investigations_filtered$legal_name, clean_names))
 investigations_filtered$name <- emp_name_i 
 
-investigations_cleaned <- investigations_filtered %>%
-  filter(is.na(name) == FALSE) # looks like there are no NA's
 
 # Clean up the city names
 approved_only <- approved_only %>%
   mutate(city = toupper(EMPLOYER_CITY))
 
-investigations_cleaned <- investigations_cleaned %>%
+investigations_filtered <- investigations_filtered  %>%
   mutate(city = toupper(cty_nm))
 
-
-
-# Create ID variable that repeats across duplicates
-#approved_only <- approved_only %>%
-  #mutate(name_city_state = sprintf("%s, %s, %s", name, city, EMPLOYER_STATE))
-
-#id_vector_1 <-  unique(approved_only$name_city_state)
-
-#approved_only <- approved_only %>%
-  #mutate(id = match(name_city_state,id_vector_1))
-
-#investigations_cleaned <- investigations_cleaned %>%
-  #mutate(name_city_state = sprintf("%s, %s, %s", name, city, st_cd))
-
-#id_vector_2 <- unique(investigations_cleaned$name_city_state)
-
-#investigations_cleaned <- investigations_cleaned %>%
-  #mutate(id = match(name_city_state,id_vector_2))
+# Within jobs, check for cases where multiple rows for the same case_ID
+View(approved_only %>% group_by(CASE_NUMBER) %>% filter(n() > 1) %>% dplyr::select(CASE_NUMBER, EMPLOYER_NAME, city))
 
 
 ################
@@ -154,33 +152,58 @@ investigations_cleaned <- investigations_cleaned %>%
 dedupe_fields = c("name",
                   "city",
                   "EMPLOYER_STATE")
+RUN_DEDUPE_JOBS = FALSE
+if(RUN_DEDUPE_JOBS){
 
-approved_matches <- fastLink(dfA = approved_only,
-                      dfB = approved_only,
-                      varnames = dedupe_fields,
-                      stringdist.match = dedupe_fields,
-                      dedupe.matches = FALSE)
+  
+  approved_matches <- fastLink(dfA = approved_only,
+                               dfB = approved_only,
+                               varnames = dedupe_fields,
+                               stringdist.match = dedupe_fields,
+                               dedupe.matches = FALSE)
+  saveRDS(approved_matches, "intermediate/jobs_dedupe.RDS")
+  
+} else{
+  approved_matches = readRDS(approved_matches, "intermediate/jobs_dedupe.RDS")
+}
+
 
 approved_deduped = getMatches(dfA = approved_only,
                               dfB = approved_only,
                               fl.out = approved_matches)
 
+sprintf("After deduplicating, we go from %s unique employers to %s unique",
+        length(unique(approved_deduped$CASE_NUMBER)),
+        length(unique(approved_deduped$dedupe.ids)))
+
+## view and try to check whether false positives or false negatives
+View(approved_deduped %>% group_by(dedupe.ids) %>% filter(n() > 1) %>% arrange(dedupe.ids) %>%
+          select(name, city, EMPLOYER_STATE)) 
+
+## rj note: stopped edits here
 
 
-# investigations
-dedupe_fields = c("name",
-                  "city",
-                  "st_cd")
+RUN_DEDUPE_I = TRUE
+if(RUN_DEDUPE_I){
+  # investigations
+  dedupe_fields = c("name",
+                    "city",
+                    "st_cd")
+  
+  investigations_matches <- fastLink(dfA = investigations_cleaned,
+                                     dfB = investigations_cleaned,
+                                     varnames = dedupe_fields,
+                                     stringdist.match = dedupe_fields,
+                                     dedupe.matches = FALSE)
+  
+  investigations_deduped = getMatches(dfA = investigations_cleaned,
+                                      dfB = investigations_cleaned,
+                                      fl.out = investigations_matches)
+  saveRDS(investigations_matches, "intermediate/investigations_dedupe_matchobj.RDS") 
+  
+  
+}
 
-investigations_matches <- fastLink(dfA = investigations_cleaned,
-                           dfB = investigations_cleaned,
-                           varnames = dedupe_fields,
-                           stringdist.match = dedupe_fields,
-                           dedupe.matches = FALSE)
-
-investigations_deduped = getMatches(dfA = investigations_cleaned,
-                             dfB = investigations_cleaned,
-                             fl.out = investigations_matches)
 
 
 
@@ -233,3 +256,26 @@ all_states_both <- all_states_both[!all_states_both %in% remove]
 all_states_post_fuzzy <- lapply(all_states_both, fuzzy_matching)
 all_states_final_df <- do.call(rbind.data.frame, all_states_post_fuzzy)
 saveRDS(all_states_final_df, "intermediate/fuzzy_matching_final.RDS")
+
+
+
+### older code
+
+
+# Create ID variable that repeats across duplicates
+#approved_only <- approved_only %>%
+#mutate(name_city_state = sprintf("%s, %s, %s", name, city, EMPLOYER_STATE))
+
+#id_vector_1 <-  unique(approved_only$name_city_state)
+
+#approved_only <- approved_only %>%
+#mutate(id = match(name_city_state,id_vector_1))
+
+#investigations_cleaned <- investigations_cleaned %>%
+#mutate(name_city_state = sprintf("%s, %s, %s", name, city, st_cd))
+
+#id_vector_2 <- unique(investigations_cleaned$name_city_state)
+
+#investigations_cleaned <- investigations_cleaned %>%
+#mutate(id = match(name_city_state,id_vector_2))
+
