@@ -3,17 +3,59 @@ Repo for DOL Summer Equity Project.
 
 ## Current scripts
 
-- [00_explore_WHD_data.ipynb](https://github.com/rebeccajohnson88/qss20_s21_proj/blob/main/code/00_explore_WHD_data.ipynb)
-  - Takes in: most current WHD violations data
-  - What it does: basic descriptives on fields, patterns over time, employers
+- [00_scraping_DOLh2a.ipynb](https://github.com/rebeccajohnson88/qss20_s21_proj/blob/main/code/00_scraping_DOLh2a.ipynb)
+  - Takes in: none
+  - What it does: scrapes DOL h2a employee data from 2014 to 2021
+  - Output: excel data (one file per year)
 
-- [01_explorequarterly.ipynb](https://github.com/rebeccajohnson88/qss20_s21_proj/blob/main/code/01_explorequarterly.ipynb)
-  - Takes in: DOL quarterly jobs data (just FY2021 Q1; needs expansion to other quarters/years)
-  - What it does: looks at total h2a workers certified in TRLA catchment areas
+- [01_disclosure_diff_fields.py](https://github.com/rebeccajohnson88/qss20_s21_proj/blob/main/code/01_disclosure_diff_fields.py)
+  - Takes in: DOL h2a job data 2014-2021
+  - What it does: looks at common and different column names based on year
+  - Output: none
 
-- [02_extract_debarment_data.ipynb](https://github.com/rebeccajohnson88/qss20_s21_proj/blob/main/code/02_extract_debarment_data.ipynb)
-  - Takes in: PDFs of debarments released by DOL
-  - What it does: parses the PDFs using `tabula`; writes csv if activated
+- [02_RenameCol_Rowbind.py](https://github.com/rebeccajohnson88/qss20_s21_proj/blob/main/code/02_RenameCol_Rowbind.py)
+  - Takes in: DOL h2a job data 2014-2021
+  - What it does: rename and reconcile the column names and row bind the data
+  - Output: 
+      - 1) combined 2014-21 h2a data based on shared columns in csv; 
+      - 2) csv jobs data just 2020 and 2021; 
+      - 3) jobs data all years/all columns
+
+- [03_fuzzy_matching.R](https://github.com/rebeccajohnson88/qss20_s21_proj/blob/main/code/03_fuzzy_matching.R)
+  - Takes in: combined DOL h2a data and WHD investigation data
+  - What it does: fuzzy matches between the two data based on name and city
+  - Output: fuzzy matched data in RDS
+
+- [04_acs_demographics.py](https://github.com/rebeccajohnson88/qss20_s21_proj/blob/main/code/04_acs_demographics.py) [04_acs_pulls.sh](https://github.com/rebeccajohnson88/qss20_s21_proj/blob/main/code/04_acs_pulls.sh)
+  - Takes in: csv acs predictors data
+  - What it does: loads ACS variables at tract level and pull census data for a certain year; 
+  - A bash script that runs 04_acs_demographics.py multiple times by iterating over years is also included
+  - Output:
+  
+- [04_acs_demographics_percentage.py](https://github.com/rebeccajohnson88/qss20_s21_proj/blob/main/code/04_acs_demographics_percentage.py)
+  - Takes in: 
+  - What it does: 
+  - Output: 
+
+- [06_geocode_jobs.py](https://github.com/rebeccajohnson88/qss20_s21_proj/blob/main/code/06_geocode_jobs.py)
+  - Takes in: pkl combined DOL h2a data
+  - What it does: using api, geocode each data entry's location with latitude and longitude
+  - Output: .pkl and csv of the geocoded data
+
+- [07_outcome_variables.R](https://github.com/rebeccajohnson88/qss20_s21_proj/blob/main/code/07_outcome_variables.R)
+  - Takes in: fuzzy matched data in RDS
+  - What it does: dedupes the data based on unique identifier; constructs outcome variables (based on findings start/end date and job star/end date) on the matched data
+  - Output: 1) deduped data 2) tables with constructed outcome variables
+
+- [09_tract_shape_files.ipynb](https://github.com/rebeccajohnson88/qss20_s21_proj/blob/main/code/09_tract_shape_files.ipynb)
+  - Takes in: tract shapefiles url
+  - What it does: scrapes census tract shape files
+  - Output: tract shape files in .shp
+
+- [10_h2a_tract_intersections.ipynb](https://github.com/rebeccajohnson88/qss20_s21_proj/blob/main/code/10_h2a_tract_intersections.ipynb)
+  - Takes in: tract shapefiles url and geocoded dol h2a data
+  - What it does: joins dol and tract data; plots case number on US map
+  - Output: .pkl dol h2a data merged with geoId; graph of case number on US map
 
 
 
