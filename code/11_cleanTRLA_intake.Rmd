@@ -1,0 +1,93 @@
+---
+title: "trla_cleaning"
+author: "Rebecca Johnson"
+date: "8/3/2021"
+output: html_document
+---
+
+
+# Packages / imports
+
+```{r}
+library(dplyr)
+library(stringr)
+library(fastLink)
+library(readr)
+library(data.table)
+library(readxl)
+library(here)
+
+## Path to data
+RUN_FROM_CONSOLE = FALSE
+if(RUN_FROM_CONSOLE){
+  args <- commandArgs(TRUE)
+  DATA_DIR = args[1]
+} else{
+  DATA_DIR = "~/Dropbox/qss20_finalproj_rawdata/summerwork"
+}
+
+
+```
+
+# Load data
+
+
+```{r}
+## orig data 
+trla_orig = read_excel(sprintf("%s/raw/Adverse_Parties_FW_TRLA.xlsx", DATA_DIR))
+clean_1 = gsub("\\s+", "_", tolower(trimws(colnames(trla_orig))))
+clean_2 = gsub("\\#", "number", clean_1)
+clean_3  = gsub("(?!\\_)[[:punct:]]", "", clean_2, perl = TRUE)
+colnames(trla_orig) = clean_3
+
+sprintf("There are %s unique case numbers, %s unique case id/lead case ids, and %s rows",
+        length(unique(trla_orig$case_number)),
+        length(unique(trla_orig$caseidlead_case_number)),
+        nrow(trla_orig))
+
+
+## create flag for cases with multiple case_numbers
+trla_orig = trla_orig %>%
+        group_by(case_number) %>%
+        mutate(is_repeated_casenum = ifelse(n() > 1, TRUE, FALSE)) %>%
+        ungroup() 
+
+## reasons for repeat:
+## (1) different adverse parties (e.g., a grower and FLC)- example: case 01-105990- address later when merging to jobs
+## (2) missing addresses in one of the rows - example: 31807  address using group_by pre jobs merge (after cleaning adverse party field)
+#View(trla_orig %>% filter(is_repeated_casenum) %>% arrange(case_number))
+
+## load second set of data
+trla_more = read_excel(sprintf("%s/raw/master consol - redacted.xls", DATA_DIR))
+sprintf("Columns in updated data pull: %s", paste(colnames(trla_more), collapse = ";")) # waiting until end to update; essential ones are intake date, city, state
+
+## focus on consolidating opponent columns
+#If multiple are present you’d want to separate out.
+#So, if ind AP is missing, use Lead AP. You have to decide if a “count” is tied to an individual client or to a group case.
+#If Lead AP is missing, that is fine, use individual case AP.
+#If both are present, you could separate out into two cases for the first occurrence? Or for each depending on how you’ve decided to count.
+trla_orig = trla_orig %>%
+      mutate(derived_opponent_consolidated = case_when(!is.na(adverse_party_organization) ~ adverse_party_organization,
+                                               is.na(adverse_party_organization) & !is.na(lead_case_ap_organization) ~ lead_case_ap_organization,
+                                               is.na(adverse_party_organization) & is.na(lead_case_ap_organization) &
+                                              !is.na(adverse_party_name) ~ adverse_party_name,
+                                              is.na(adverse_party_organization) & is.na(lead_case_ap_organization) &
+                                              is.na(adverse_party_name) & !is.na(lead_case_ap_name) ~ lead_case_ap_name,
+                                              TRUE ~ NA_character_),
+             derived_opponent_source = case_when(!is.na(adverse_party_organization) ~ "AP org",
+                                               is.na(adverse_party_organization) & !is.na(lead_case_ap_organization) ~ "Lead AP org",
+                                               is.na(adverse_party_organization) & is.na(lead_case_ap_organization) &
+                                              !is.na(adverse_party_name) ~ "AP name",
+                                              is.na(adverse_party_organization) & is.na(lead_case_ap_organization) &
+                                              is.na(adverse_party_name) & !is.na(lead_case_ap_name) ~ "Lead AP name",
+                                              TRUE ~ "Missing all")) 
+
+## write ones that are misisng all
+write.csv(tr)
+
+
+## for names, matching them to organizations based on other records with name
+
+## parties to filter out: dol, SSA, texas workforce 
+
+```
