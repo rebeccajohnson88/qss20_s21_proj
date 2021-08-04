@@ -80,10 +80,13 @@ trla_orig = trla_orig %>%
                                               !is.na(adverse_party_name) ~ "AP name",
                                               is.na(adverse_party_organization) & is.na(lead_case_ap_organization) &
                                               is.na(adverse_party_name) & !is.na(lead_case_ap_name) ~ "Lead AP name",
-                                              TRUE ~ "Missing all")) 
+                                              TRUE ~ "Missing all"),
+             derived_is_notemp = case_when(grepl("Social Security Administration|Department of Labor|Workforce", derived_opponent_consolidated) ~ TRUE,
+                                      TRUE ~  FALSE)) 
 
-## write ones that are misisng all
-write.csv(tr)
+## look at all unique ones
+View(trla_orig %>% filter(!is.na(derived_opponent_consolidated)) %>% group_by(derived_opponent_consolidated) %>% summarise(count = n()) %>%
+  arrange(desc(count)) %>% slice(1:100))
 
 
 ## for names, matching them to organizations based on other records with name
