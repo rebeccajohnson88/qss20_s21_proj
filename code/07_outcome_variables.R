@@ -59,7 +59,7 @@ approved_only_discarded_obs <- approved_only_discarded_obs %>%
 
 
 # merge them back onto the dataset
-matched_data_intermediate <- rbind(matched_data, approved_only_discarded_obs)
+matched_data_intermediate <- merge(matched_data, approved_only_discarded_obs, all.x = TRUE)
 matched_data_final <- rbind(matched_data_intermediate, investigations_filtered_discarded_obs)
 
 # now this is tricky, we need to replace the na's of the duplicates with the actual match
@@ -88,5 +88,4 @@ table(matched_data$outcome_1)
 table(matched_data$outcome_2)
 table(matched_data$outcome_3)
 table(matched_data$outcome_4)
-
 
