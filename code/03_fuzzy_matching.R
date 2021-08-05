@@ -1,7 +1,7 @@
 ##########################
 # This code fuzzy matches between H2A applications data and the WHD investigations data
 # Author: Cam Guage 
-# Written: 08/02/2021
+# Written: 6/29/2021
 ##########################
 
 ##########################
@@ -142,7 +142,7 @@ investigations_filtered <- investigations_filtered %>%
 
 # job postings data
 
-RUN_DEDUPE_JOBS = TRUE
+RUN_DEDUPE_JOBS = FALSE
 if(RUN_DEDUPE_JOBS){
   dedupe_fields = c("name")
   
@@ -167,6 +167,14 @@ sprintf("After deduplicating job clearance data, we go from %s unique employers 
 
 approved_deduped$merging_index = 1:nrow(approved_deduped)
 
+sprintf("We can see that there are %s unique values for merging_index (x) and the largest is %s",
+        length(unique(approved_deduped$merging_index)),
+        max(approved_deduped$merging_index)) # both of these are 85216
+
+# save before we filter out duplicates
+saveRDS(approved_deduped, "intermediate/approved_only_pre_deduping.RDS")
+
+set.seed(1)
 
 approved_deduped <- approved_deduped %>%
   group_by(dedupe.ids) %>%
@@ -202,6 +210,12 @@ sprintf("After deduplicating the filtered investigations data, we go from %s uni
 
 investigations_deduped$merging_index = 1:nrow(investigations_deduped)
 
+sprintf("We can see that there are %s unique values for merging_index (y) and the largest is %s",
+        length(unique(investigations_deduped$merging_index)),
+        max(investigations_deduped$merging_index)) # both of these values are 4669
+
+# save before we filter out duplicates
+saveRDS(investigations_deduped, "intermediate/investigations_filtered_pre_deduping.RDS")
 
 investigations_deduped <- investigations_deduped %>%
   group_by(dedupe.ids) %>%
@@ -255,9 +269,21 @@ all_states_both <- all_states[(all_states %in% approved_deduped$EMPLOYER_STATE)]
 # States "MP" and "" throwing an error- I think this is because "MP" only has one row in approved_only_temp...
 # Error is "cannot coerce class ‘c("fastLink", "matchesLink")’ to a data.frame" for the 2 states
 # Error is "wrong sign in 'by' argument" for ""
-remove <- c("MP", "", "AK")
+remove <- c("MP", "")
 all_states_both <- all_states_both[!all_states_both %in% remove]
 
 all_states_post_fuzzy <- lapply(all_states_both, fuzzy_matching)
 all_states_final_df <- do.call(rbind.data.frame, all_states_post_fuzzy)
+
+# check merging_index.x and merging_index.y
+sprintf("We can see that there are %s unique values for merging_index.x and the largest is %s",
+        length(unique(all_states_final_df$merging_index.x)),
+        max(all_states_final_df$merging_index.x)) # 3702, 4669
+
+sprintf("We can see that there are %s unique values for merging_index.x and the largest is %s",
+        length(unique(all_states_final_df$merging_index.y)),
+        max(all_states_final_df$merging_index.y, na.rm = TRUE)) # 2579, 85142
+
+
+
 saveRDS(all_states_final_df, "intermediate/fuzzy_matching_final.RDS")
