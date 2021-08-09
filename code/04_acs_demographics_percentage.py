@@ -7,6 +7,18 @@ from os import listdir
 from pathlib import Path
 import geopandas as gpd
 from geopandas.tools import sjoin
+import sys
+import argparse
+
+## Define script-levels args of year
+my_parser = argparse.ArgumentParser(description='Pull a specific ACS year')
+my_parser.add_argument('--dropbox', help = "Path to summer work Dropbox directory")
+my_parser.add_argument('--acsyear', type = int, help = "integer with year of ACS data to pull")
+my_parser.add_argument("--mode", default='client')
+my_parser.add_argument("--port", default=52162)
+args = my_parser.parse_args()
+# DROPBOX_DATA_PATH = args.dropbox
+YEAR = args.acsyear
 
 ## define pathnames
 # dirname = os.path.dirname(__file__)
@@ -16,9 +28,11 @@ DROPBOX_DATA_PATH = os.path.join(dropbox_general,
                                 "qss20_finalproj_rawdata/summerwork/")
 DATA_RAW_DIR = os.path.join(DROPBOX_DATA_PATH, "raw/")
 DATA_ID_DIR = os.path.join(DROPBOX_DATA_PATH, "intermediate/")
-DF_ACS_PATH = os.path.join(DATA_RAW_DIR, "ACS_TRACT_DEMOGRAPHICS/acs_dem_year_2014.pkl")
+DF_ACS_PATH = os.path.join(DATA_RAW_DIR, "ACS_TRACT_DEMOGRAPHICS/acs_dem_year_" + str(YEAR) + ".pkl")
 ACS_VARIABLE_PATH = os.path.join(DATA_ID_DIR, "predictors_acs_varname.csv")
 H2AJOBS_TRACTS = os.path.join(DATA_ID_DIR, "unique_tracts_withjobs.pkl")
+
+PREDICTORS_WRITEFOLDER = os.path.join(DATA_ID_DIR, "acs_tract_predictors_data/")
 
 ## read in data
 df_acs = pd.read_pickle(DF_ACS_PATH)
@@ -244,5 +258,7 @@ add_missing_tract()
 #final_merge_with_missing.shape
 
 
-## write final dataframe to pickle
-pd.to_pickle(final_merge_with_missing, "acs_2014_percentagefinal")
+## write final dataframe to pick
+final_merge_with_missing.to_pickle(PREDICTORS_WRITEFOLDER + "acs_tract_percentage" + str(YEAR) + ".pkl")
+
+# pd.to_pickle(final_merge_with_missing, "acs_2014_percentagefinal")
