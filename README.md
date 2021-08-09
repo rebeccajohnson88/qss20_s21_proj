@@ -33,9 +33,9 @@ Repo for DOL Summer Equity Project.
   - Output:
   
 - [04_acs_demographics_percentage.py](https://github.com/rebeccajohnson88/qss20_s21_proj/blob/main/code/04_acs_demographics_percentage.py)
-  - Takes in: 
-  - What it does: 
-  - Output: 
+  - Takes in: csv predictors, pickle acs tract demographics data, pickle H2A jobs tract data
+  - What it does: identify which predictors to calculate percentage, calculate percentage, and clean and combine percentage and nonpercentage variables' data  
+  - Output: .pkl of calculated tract-level percentage data and remaining predictors data 
 
 - [06_geocode_jobs.py](https://github.com/rebeccajohnson88/qss20_s21_proj/blob/main/code/06_geocode_jobs.py)
   - Takes in: pkl combined DOL h2a data
