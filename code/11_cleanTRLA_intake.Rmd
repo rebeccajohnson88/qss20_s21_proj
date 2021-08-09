@@ -16,6 +16,7 @@ library(readr)
 library(data.table)
 library(readxl)
 library(here)
+library(lubridate)
 
 ## Path to data
 RUN_FROM_CONSOLE = FALSE
@@ -25,47 +26,71 @@ if(RUN_FROM_CONSOLE){
 } else{
   DATA_DIR = "~/Dropbox/qss20_finalproj_rawdata/summerwork"
 }
-
-
 ```
 
 # Load data
 
-
-```{r}
+```{r warning=FALSE}
 ## orig data 
-trla_orig = read_excel(sprintf("%s/raw/Adverse_Parties_FW_TRLA.xlsx", DATA_DIR))
+trla_orig = read_excel(sprintf("%s/raw/Adverse_Parties_FW_TRLA.xlsx", DATA_DIR)) %>%
+    mutate(`Intake Date` = ymd(`Intake Date`),
+           `Date Closed` = ymd(`Date Closed`))
+
+## load second set of data
+trla_more = read_excel(sprintf("%s/raw/master consol - redacted.xls", DATA_DIR))
+```
+
+```{r warning=FALSE}
+##DROPBOX WORKAROUND -- DELETE LATER!
+trla_orig <- read_excel("../../raw_workaround/Adverse_Parties_FW_TRLA.xlsx") %>%
+    mutate(`Intake Date` = ymd(`Intake Date`),
+           `Date Closed` = ymd(`Date Closed`))
+
+##DROPBOX WORKAROUND -- DELETE LATER!
+trla_more = read_excel("../../raw_workaround/master consol - redacted 2.xls")
+
+#clean column names in original
 clean_1 = gsub("\\s+", "_", tolower(trimws(colnames(trla_orig))))
 clean_2 = gsub("\\#", "number", clean_1)
 clean_3  = gsub("(?!\\_)[[:punct:]]", "", clean_2, perl = TRUE)
 colnames(trla_orig) = clean_3
 
-sprintf("There are %s unique case numbers, %s unique case id/lead case ids, and %s rows",
+#Rename trla_more columns to match orig
+trla_more <- trla_more %>%
+  rename(case_number = fileno, legal_problem_code = problem, case_disposition = appsts, intake_date = date_intrv, derived_opponent_consolidated = opponent, date_closed = date_close)
+
+```
+
+TO DO:
+Separate out multiple opponents in trla_more, plus multiple states
+
+
+```{r}
+sprintf("Columns in original data pull: %s", paste(colnames(trla_orig), collapse = ";")) 
+
+sprintf("Columns in updated data pull: %s", paste(colnames(trla_more), collapse = ";")) 
+
+sprintf("There are %s unique case numbers, %s unique case id/lead case ids, and %s rows in original dataset",
         length(unique(trla_orig$case_number)),
         length(unique(trla_orig$caseidlead_case_number)),
         nrow(trla_orig))
 
+sprintf("There are %s unique case numbers and %s rows in original dataset",
+        length(unique(trla_more$case_number)),
+        nrow(trla_more))
 
-## create flag for cases with multiple case_numbers
-trla_orig = trla_orig %>%
-        group_by(case_number) %>%
-        mutate(is_repeated_casenum = ifelse(n() > 1, TRUE, FALSE)) %>%
-        ungroup() 
+#are there any case numbers with repeated case number, date, and opponent? would like to look more closely at repeated case numbers
 
-## reasons for repeat:
-## (1) different adverse parties (e.g., a grower and FLC)- example: case 01-105990- address later when merging to jobs
-## (2) missing addresses in one of the rows - example: 31807  address using group_by pre jobs merge (after cleaning adverse party field)
-#View(trla_orig %>% filter(is_repeated_casenum) %>% arrange(case_number))
+```
 
-## load second set of data
-trla_more = read_excel(sprintf("%s/raw/master consol - redacted.xls", DATA_DIR))
-sprintf("Columns in updated data pull: %s", paste(colnames(trla_more), collapse = ";")) # waiting until end to update; essential ones are intake date, city, state
-
+```{r}
 ## focus on consolidating opponent columns
+
 #If multiple are present you’d want to separate out.
 #So, if ind AP is missing, use Lead AP. You have to decide if a “count” is tied to an individual client or to a group case.
 #If Lead AP is missing, that is fine, use individual case AP.
 #If both are present, you could separate out into two cases for the first occurrence? Or for each depending on how you’ve decided to count.
+
 trla_orig = trla_orig %>%
       mutate(derived_opponent_consolidated = case_when(!is.na(adverse_party_organization) ~ adverse_party_organization,
                                                is.na(adverse_party_organization) & !is.na(lead_case_ap_organization) ~ lead_case_ap_organization,
@@ -81,16 +106,77 @@ trla_orig = trla_orig %>%
                                               is.na(adverse_party_organization) & is.na(lead_case_ap_organization) &
                                               is.na(adverse_party_name) & !is.na(lead_case_ap_name) ~ "Lead AP name",
                                               TRUE ~ "Missing all"),
-             derived_is_notemp = case_when(grepl("Social Security Administration|Department of Labor|Workforce", derived_opponent_consolidated) ~ TRUE,
+             
+             derived_is_notemp = case_when(grepl("Social Security Administration|Department of Labor|Workforce|Department|Dept|U.S. Immigration and Customs Enforcement|United States Customs and Border Protection|United States Environmental Protection Agency|United States Immigration and Naturalization Service|United States of America|Texas Attorney General|Texas Employment Commission|US Citizenship And Immigration Services|	
+Texas Unemployment Commission|workforce", derived_opponent_consolidated) ~ TRUE,
                                       TRUE ~  FALSE)) 
+```
 
+TO DO:
+
+Figure out hierarchical strategy here.
+
+How many case numbers are shared between trla_orig with "Missing all" and trla_more?
+How many will get filled in with the 'trla_more'?
+
+Need to figure out if I can rowbind or if it's actually a join. Could be both.
+- If case number matches across sets and opp is missing, sub 'more'
+- If case number matches across sets and opp is present but different, add new row with 'more' info
+- If case number matches across sets and opp is present and same, do nothing
+
+
+```{r}
+## flag if:
+# case number is in both datasets
+# opponent info missing in a set
+# opponent info missing in both
+
+all_trla <- trla_orig %>%
+  bind_rows(trla_more, .id = "id")
+
+
+#See all case numbers where opponents are missing in both sets, or missing in one and there is no record of the case in the other
+View(merge %>%
+       group_by(case_number) %>%
+       summarize(count1 = length(case_number[id==1]),
+                 count2 = length(case_number[id==2]),
+                 missing_opp1 = ifelse(count1==0,NA,length(case_number[is.na(derived_opponent_consolidated) & id==1])),
+                 missing_opp2 = ifelse(count2==0,NA,length(case_number[is.na(derived_opponent_consolidated) & id==2]))) %>%
+       filter((missing_opp1 > 0 & missing_opp2 > 0) | (is.na(missing_opp1) & missing_opp2 > 0) | (missing_opp1>0 & is.na(missing_opp2))))
+
+```
+
+
+```{r}
+
+## reasons for repeat:
+## (1) different adverse parties (e.g., a grower and FLC)- example: case 01-105990 - address later when merging to jobs
+## (2) missing addresses in one of the rows - example: 31807  address using group_by pre jobs merge (after cleaning adverse party field)
+
+View(trla_orig %>%
+       filter(is_repeated_casenum) %>% 
+       group_by(case_number) %>%
+       summarize(count = n()))
+
+```
+
+```{r}
+## create flag for cases with multiple case_numbers
+trla_orig = trla_orig %>%
+        group_by(case_number) %>%
+        mutate(is_repeated_casenum = ifelse(n() > 1, TRUE, FALSE)) %>%
+        ungroup() 
+
+```
+
+```{r}
 ## look at all unique ones
-View(trla_orig %>% filter(!is.na(derived_opponent_consolidated)) %>% group_by(derived_opponent_consolidated) %>% summarise(count = n()) %>%
-  arrange(desc(count)) %>% slice(1:100))
 
+View(trla_orig %>% 
+       filter(!is.na(derived_opponent_consolidated)) %>% 
+       group_by(derived_opponent_consolidated) %>% 
+       summarise(count = n()) %>%
+       arrange(desc(count)) %>% slice(1:100))
 
 ## for names, matching them to organizations based on other records with name
-
-## parties to filter out: dol, SSA, texas workforce 
-
 ```
