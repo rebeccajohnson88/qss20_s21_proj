@@ -38,9 +38,11 @@ trla_orig = read_excel(sprintf("%s/raw/Adverse_Parties_FW_TRLA.xlsx", DATA_DIR))
 
 ## load second set of data
 trla_more = read_excel(sprintf("%s/raw/master consol - redacted.xls", DATA_DIR))
+
 ```
 
 ```{r warning=FALSE}
+
 ##DROPBOX WORKAROUND -- DELETE LATER!
 trla_orig <- read_excel("../../raw_workaround/Adverse_Parties_FW_TRLA.xlsx") %>%
     mutate(`Intake Date` = ymd(`Intake Date`),
@@ -62,8 +64,8 @@ trla_more <- trla_more %>%
 ```
 
 TO DO:
-Separate out multiple opponents in trla_more, plus multiple states
-
+Separate out multiple opponents in trla_more, plus multiple states?
+Seeing if Dave can address
 
 ```{r}
 sprintf("Columns in original data pull: %s", paste(colnames(trla_orig), collapse = ";")) 
@@ -78,8 +80,6 @@ sprintf("There are %s unique case numbers, %s unique case id/lead case ids, and 
 sprintf("There are %s unique case numbers and %s rows in original dataset",
         length(unique(trla_more$case_number)),
         nrow(trla_more))
-
-#are there any case numbers with repeated case number, date, and opponent? would like to look more closely at repeated case numbers
 
 ```
 
@@ -106,6 +106,7 @@ trla_orig = trla_orig %>%
                                               is.na(adverse_party_organization) & is.na(lead_case_ap_organization) &
                                               is.na(adverse_party_name) & !is.na(lead_case_ap_name) ~ "Lead AP name",
                                               TRUE ~ "Missing all"),
+             lead_OR_ind_case_num = ifelse(is.na(caseidlead_case_number), case_number, caseidlead_case_number),
              
              derived_is_notemp = case_when(grepl("Social Security Administration|Department of Labor|Workforce|Department|Dept|U.S. Immigration and Customs Enforcement|United States Customs and Border Protection|United States Environmental Protection Agency|United States Immigration and Naturalization Service|United States of America|Texas Attorney General|Texas Employment Commission|US Citizenship And Immigration Services|	
 Texas Unemployment Commission|workforce", derived_opponent_consolidated) ~ TRUE,
@@ -126,23 +127,25 @@ Need to figure out if I can rowbind or if it's actually a join. Could be both.
 
 
 ```{r}
-## flag if:
-# case number is in both datasets
-# opponent info missing in a set
-# opponent info missing in both
 
-all_trla <- trla_orig %>%
-  bind_rows(trla_more, .id = "id")
+trla_more <- trla_more %>%
+  mutate(missing_AP = ifelse(is.na(derived_opponent_consolidated),TRUE,FALSE))
 
+#Create flags for 'in more' & 'missing AP' in either or both
+trla_orig2 <- trla_orig %>%
+  group_by(case_number) %>%
+  mutate(in_more = ifelse(case_number %in% trla_more$case_number, TRUE, FALSE)) %>%
+  ungroup() %>%
+  mutate(missing_AP = ifelse(is.na(derived_opponent_consolidated),TRUE,FALSE),
+         AP_in_more = ifelse((in_more==TRUE & !is.na(trla_more$derived_opponent_consolidated)), TRUE, FALSE),
+         missing_in_both = ifelse((missing_AP & !AP_in_more),TRUE,FALSE))
 
-#See all case numbers where opponents are missing in both sets, or missing in one and there is no record of the case in the other
-View(merge %>%
-       group_by(case_number) %>%
-       summarize(count1 = length(case_number[id==1]),
-                 count2 = length(case_number[id==2]),
-                 missing_opp1 = ifelse(count1==0,NA,length(case_number[is.na(derived_opponent_consolidated) & id==1])),
-                 missing_opp2 = ifelse(count2==0,NA,length(case_number[is.na(derived_opponent_consolidated) & id==2]))) %>%
-       filter((missing_opp1 > 0 & missing_opp2 > 0) | (is.na(missing_opp1) & missing_opp2 > 0) | (missing_opp1>0 & is.na(missing_opp2))))
+#Filtering for cases in 2010 and greater leaves us with only 420 missing an adverse party in both datasets
+View(trla_orig2 %>%
+      filter(intake_date >= ymd("2010-01-01")) %>%
+      group_by(missing_in_both) %>%
+       summarise(n()))
+
 
 ```
 
@@ -153,19 +156,16 @@ View(merge %>%
 ## (1) different adverse parties (e.g., a grower and FLC)- example: case 01-105990 - address later when merging to jobs
 ## (2) missing addresses in one of the rows - example: 31807  address using group_by pre jobs merge (after cleaning adverse party field)
 
-View(trla_orig %>%
-       filter(is_repeated_casenum) %>% 
-       group_by(case_number) %>%
-       summarize(count = n()))
+trla_orig = trla_orig %>%
+        group_by(case_number) %>%
+        mutate(is_repeated_casenum = ifelse(n() > 1, TRUE, FALSE)) %>%
+        ungroup() 
 
 ```
 
 ```{r}
 ## create flag for cases with multiple case_numbers
-trla_orig = trla_orig %>%
-        group_by(case_number) %>%
-        mutate(is_repeated_casenum = ifelse(n() > 1, TRUE, FALSE)) %>%
-        ungroup() 
+
 
 ```
 
