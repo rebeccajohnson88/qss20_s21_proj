@@ -106,7 +106,6 @@ trla_orig = trla_orig %>%
                                               is.na(adverse_party_organization) & is.na(lead_case_ap_organization) &
                                               is.na(adverse_party_name) & !is.na(lead_case_ap_name) ~ "Lead AP name",
                                               TRUE ~ "Missing all"),
-             lead_OR_ind_case_num = ifelse(is.na(caseidlead_case_number), case_number, caseidlead_case_number),
              
              derived_is_notemp = case_when(grepl("Social Security Administration|Department of Labor|Workforce|Department|Dept|U.S. Immigration and Customs Enforcement|United States Customs and Border Protection|United States Environmental Protection Agency|United States Immigration and Naturalization Service|United States of America|Texas Attorney General|Texas Employment Commission|US Citizenship And Immigration Services|	
 Texas Unemployment Commission|workforce", derived_opponent_consolidated) ~ TRUE,
@@ -132,19 +131,50 @@ trla_more <- trla_more %>%
   mutate(missing_AP = ifelse(is.na(derived_opponent_consolidated),TRUE,FALSE))
 
 #Create flags for 'in more' & 'missing AP' in either or both
+#Filter out earlier data
+
 trla_orig2 <- trla_orig %>%
   group_by(case_number) %>%
   mutate(in_more = ifelse(case_number %in% trla_more$case_number, TRUE, FALSE)) %>%
   ungroup() %>%
-  mutate(missing_AP = ifelse(is.na(derived_opponent_consolidated),TRUE,FALSE),
-         AP_in_more = ifelse((in_more==TRUE & !is.na(trla_more$derived_opponent_consolidated)), TRUE, FALSE),
-         missing_in_both = ifelse((missing_AP & !AP_in_more),TRUE,FALSE))
+  mutate(missing_AP = ifelse(is.na(derived_opponent_consolidated), TRUE, FALSE),
 
-#Filtering for cases in 2010 and greater leaves us with only 420 missing an adverse party in both datasets
+         AP_in_more = ifelse((in_more & !is.na(trla_more$derived_opponent_consolidated)), TRUE, FALSE),
+         
+         missing_in_both = ifelse((missing_AP & trla_more$missing_AP),TRUE, FALSE)) %>%
+  
+  filter(intake_date >= ymd("2014-01-01"))
+
+
+#Filtering for cases in 2014 and greater leaves us with only 148 missing an adverse party in both datasets
 View(trla_orig2 %>%
-      filter(intake_date >= ymd("2010-01-01")) %>%
       group_by(missing_in_both) %>%
        summarise(n()))
+
+#Checking for any illogical combinations
+View(trla_orig2 %>%
+      group_by(missing_in_both,AP_in_more, missing_AP, in_more) %>%
+       summarise(n()))
+
+#BEFORE any merges, count of missing
+trla_orig2 %>%
+      group_by(missing_AP) %>%
+       summarise(n())
+
+```
+
+
+```{r}
+#Follow proposed logic to join the datasets
+trla_orig3 <- trla_orig2 %>%
+  
+#This does not work -- matches are weird and wrong!
+  
+  mutate(derived_opponent_consolidated = ifelse((is.na(derived_opponent_consolidated) & AP_in_more), 
+                                                trla_more$derived_opponent_consolidated, 
+                                                derived_opponent_consolidated),
+         
+         missing_AP = ifelse(is.na(derived_opponent_consolidated),TRUE,FALSE))
 
 
 ```
