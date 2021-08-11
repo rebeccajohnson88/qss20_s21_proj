@@ -9,7 +9,7 @@ output: html_document
 # Packages / imports
 
 ```{r}
-library(dplyr)
+library(tidyverse)
 library(stringr)
 library(fastLink)
 library(readr)
@@ -28,7 +28,7 @@ if(RUN_FROM_CONSOLE){
 }
 ```
 
-# Load data
+Load data
 
 ```{r warning=FALSE}
 ## orig data 
@@ -41,6 +41,8 @@ trla_more = read_excel(sprintf("%s/raw/master consol - redacted.xls", DATA_DIR))
 
 ```
 
+
+Dropbox workaround data loading:
 ```{r warning=FALSE}
 
 ##DROPBOX WORKAROUND -- DELETE LATER!
@@ -50,7 +52,11 @@ trla_orig <- read_excel("../../raw_workaround/Adverse_Parties_FW_TRLA.xlsx") %>%
 
 ##DROPBOX WORKAROUND -- DELETE LATER!
 trla_more = read_excel("../../raw_workaround/master consol - redacted 2.xls")
+```
 
+
+Clean up and rename:
+```{r}
 #clean column names in original
 clean_1 = gsub("\\s+", "_", tolower(trimws(colnames(trla_orig))))
 clean_2 = gsub("\\#", "number", clean_1)
@@ -63,10 +69,8 @@ trla_more <- trla_more %>%
 
 ```
 
-TO DO:
-Separate out multiple opponents in trla_more, plus multiple states?
-Seeing if Dave can address
 
+Info:
 ```{r}
 sprintf("Columns in original data pull: %s", paste(colnames(trla_orig), collapse = ";")) 
 
@@ -83,6 +87,8 @@ sprintf("There are %s unique case numbers and %s rows in original dataset",
 
 ```
 
+
+Consolidate AP columns:
 ```{r}
 ## focus on consolidating opponent columns
 
@@ -112,17 +118,17 @@ Texas Unemployment Commission|workforce", derived_opponent_consolidated) ~ TRUE,
                                       TRUE ~  FALSE)) 
 ```
 
-TO DO:
 
-Figure out hierarchical strategy here.
+Working on the merge...
 
 How many case numbers are shared between trla_orig with "Missing all" and trla_more?
 How many will get filled in with the 'trla_more'?
 
-Need to figure out if I can rowbind or if it's actually a join. Could be both.
-- If case number matches across sets and opp is missing, sub 'more'
-- If case number matches across sets and opp is present but different, add new row with 'more' info
-- If case number matches across sets and opp is present and same, do nothing
+Both a rowbind and a join.
+1: If case number matches across sets and opp is missing, sub 'more'
+2. If case number matches across sets and opp is present but different, add new row with 'more' info
+3. If case number matches across sets and opp is present and same, do nothing
+4. If case number is unique to trla_more, add new row
 
 
 ```{r}
@@ -137,67 +143,113 @@ trla_orig2 <- trla_orig %>%
   group_by(case_number) %>%
   mutate(in_more = ifelse(case_number %in% trla_more$case_number, TRUE, FALSE)) %>%
   ungroup() %>%
-  mutate(missing_AP = ifelse(is.na(derived_opponent_consolidated), TRUE, FALSE),
-
-         AP_in_more = ifelse((in_more & !is.na(trla_more$derived_opponent_consolidated)), TRUE, FALSE),
-         
-         missing_in_both = ifelse((missing_AP & trla_more$missing_AP),TRUE, FALSE)) %>%
-  
+  mutate(missing_AP = ifelse(is.na(derived_opponent_consolidated), TRUE, FALSE)) %>%
   filter(intake_date >= ymd("2014-01-01"))
 
 
-#Filtering for cases in 2014 and greater leaves us with only 148 missing an adverse party in both datasets
-View(trla_orig2 %>%
-      group_by(missing_in_both) %>%
-       summarise(n()))
+#See a count of various combinations of missing AP in orig (1) and more (2)
+missing_combos <- trla_orig2 %>%
+  distinct(case_number,.keep_all = TRUE) %>%
+  bind_rows(trla_more, .id = "id") %>%
+  select("case_number","id","missing_AP") %>%
+  pivot_wider(id_cols = "case_number", names_from = "id", values_from = "missing_AP") %>%
+  group_by(`1`,`2`) %>%
+  summarise(count = n()) %>%
+  ungroup()
 
-#Checking for any illogical combinations
-View(trla_orig2 %>%
-      group_by(missing_in_both,AP_in_more, missing_AP, in_more) %>%
-       summarise(n()))
-
-#BEFORE any merges, count of missing
-trla_orig2 %>%
-      group_by(missing_AP) %>%
-       summarise(n())
+  
+print(sprintf("There are %s case numbers across both datasets with no AP in either set. There are %s case numbers in trla_orig with a match in trla_more. There are %s case numbers in trla_more but not in trla_orig. There are %s cases with missing AP in trla_orig before merging.",
+        missing_combos %>%
+        filter((`1` & `2`) | (`1` & is.na(`2`)) | (`2` & is.na(`1`))) %>%
+          summarise(sum(count)),
+        missing_combos %>%
+        filter((`1` &!`2`)) %>%
+          summarise(sum(count)),
+        missing_combos %>%
+          filter(is.na(`1`)) %>%
+          summarise(sum(count)),
+        trla_orig2 %>%
+          filter(missing_AP) %>%
+          summarise(length(missing_AP))
+        ))
 
 ```
 
 
 ```{r}
 #Follow proposed logic to join the datasets
-trla_orig3 <- trla_orig2 %>%
-  
-#This does not work -- matches are weird and wrong!
-  
-  mutate(derived_opponent_consolidated = ifelse((is.na(derived_opponent_consolidated) & AP_in_more), 
-                                                trla_more$derived_opponent_consolidated, 
-                                                derived_opponent_consolidated),
-         
-         missing_AP = ifelse(is.na(derived_opponent_consolidated),TRUE,FALSE))
 
+#Additional logic -- case number matches, present in orig & present in more, but diff AP
+#really not sure how to do this without a clear separator for the trla_more opponent data
+#just eyeballing it, does not seem like a major issue
+View(step1 %>%
+       select(case_number,derived_opponent_consolidated.x, derived_opponent_consolidated.y, missing_AP.x, missing_AP.y))
+
+
+trla_more_unique <- trla_more %>%
+  anti_join(trla_orig2, by = "case_number") %>%
+  filter(intake_date >= ymd("2014-01-01"))
+
+trla_merge <- trla_orig2 %>%
+  
+  #If trla_more has distinct case numbers...
+  #Add rows of trla_more with case numbers that do not show up in trla_orig
+  bind_rows(trla_more_unique, .id = "id") %>%
+  
+  #If case number matches across sets and opp is missing, sub 'more'
+  #Join with matching case numbers in trla_more to fill in missing opponent info
+  left_join(trla_more, by = "case_number") %>%
+  
+  mutate(derived_opponent_consolidated_2 = ifelse(is.na(derived_opponent_consolidated.x), 
+                                                derived_opponent_consolidated.y, 
+                                                derived_opponent_consolidated.x),
+         
+         #note source of AP
+         derived_oc_2_source = ifelse(is.na(derived_opponent_consolidated_2), NA, ifelse(id == "2",
+                                                                                        "trla_more",                                                                                  ifelse(is.na(derived_opponent_consolidated.x),"trla_more","trla_orig"))),
+          
+         #for recalculating missing APs                            
+          missing_AP = ifelse(is.na(derived_opponent_consolidated_2),TRUE,FALSE)
+         ) 
+
+#Checking the additional rows added in the first step
+View(trla_merge %>%
+  filter(id == "2"))
+
+#Results as expected -- 199 remain in original
+trla_merge %>%
+  filter(id == "1") %>%
+      group_by(missing_AP) %>%
+       summarise(n())
+
+#Overall, we get the number of missing APs we were expecting, but fewer because we filtered out pre-2014 for the unique trla_more rows
+trla_merge %>%
+      group_by(missing_AP) %>%
+       summarise(n())
 
 ```
 
+#TO DO
+- Deal with separators for the states in trla_more data
+- Deal with multiple opps on one line in trla_more data
+- See 174-178
 
+
+Rebecca's older code:
 ```{r}
 
 ## reasons for repeat:
 ## (1) different adverse parties (e.g., a grower and FLC)- example: case 01-105990 - address later when merging to jobs
 ## (2) missing addresses in one of the rows - example: 31807  address using group_by pre jobs merge (after cleaning adverse party field)
 
-trla_orig = trla_orig %>%
+#flag for multiple case numbers
+trla_orig2 = trla_orig2 %>%
         group_by(case_number) %>%
         mutate(is_repeated_casenum = ifelse(n() > 1, TRUE, FALSE)) %>%
         ungroup() 
 
 ```
 
-```{r}
-## create flag for cases with multiple case_numbers
-
-
-```
 
 ```{r}
 ## look at all unique ones
