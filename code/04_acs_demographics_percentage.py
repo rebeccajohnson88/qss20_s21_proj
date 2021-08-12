@@ -11,14 +11,14 @@ import sys
 import argparse
 
 ## Define script-levels args of year
-my_parser = argparse.ArgumentParser(description='Pull a specific ACS year')
-my_parser.add_argument('--dropbox', help = "Path to summer work Dropbox directory")
-my_parser.add_argument('--acsyear', type = int, help = "integer with year of ACS data to pull")
-my_parser.add_argument("--mode", default='client')
-my_parser.add_argument("--port", default=52162)
-args = my_parser.parse_args()
-# DROPBOX_DATA_PATH = args.dropbox
-YEAR = args.acsyear
+# my_parser = argparse.ArgumentParser(description='Pull a specific ACS year')
+# my_parser.add_argument('--dropbox', help = "Path to summer work Dropbox directory")
+# my_parser.add_argument('--acsyear', type = int, help = "integer with year of ACS data to pull")
+# my_parser.add_argument("--mode", default='client')
+# my_parser.add_argument("--port", default=52162)
+# args = my_parser.parse_args()
+# # DROPBOX_DATA_PATH = args.dropbox
+# YEAR = args.acsyear
 
 ## define pathnames
 # dirname = os.path.dirname(__file__)
@@ -28,11 +28,12 @@ DROPBOX_DATA_PATH = os.path.join(dropbox_general,
                                 "qss20_finalproj_rawdata/summerwork/")
 DATA_RAW_DIR = os.path.join(DROPBOX_DATA_PATH, "raw/")
 DATA_ID_DIR = os.path.join(DROPBOX_DATA_PATH, "intermediate/")
-DF_ACS_PATH = os.path.join(DATA_RAW_DIR, "ACS_TRACT_DEMOGRAPHICS/acs_dem_year_" + str(YEAR) + ".pkl")
+DF_ACS_PATH = os.path.join(DATA_RAW_DIR, "ACS_TRACT_DEMOGRAPHICS/acs_dem_year_" + "2019" + ".pkl")
+# DF_ACS_PATH = os.path.join(DATA_RAW_DIR, "ACS_TRACT_DEMOGRAPHICS/acs_dem_year_" + str(YEAR) + ".pkl")
 ACS_VARIABLE_PATH = os.path.join(DATA_ID_DIR, "predictors_acs_varname.csv")
 H2AJOBS_TRACTS = os.path.join(DATA_ID_DIR, "unique_tracts_withjobs.pkl")
 
-PREDICTORS_WRITEFOLDER = os.path.join(DATA_ID_DIR, "acs_tract_predictors_data/")
+# PREDICTORS_WRITEFOLDER = os.path.join(DATA_RAW_DIR)
 
 ## read in data
 df_acs = pd.read_pickle(DF_ACS_PATH)
@@ -49,7 +50,6 @@ h2ajobs = pd.read_pickle(H2AJOBS_TRACTS)
 df_acs.GEO_ID.astype("string")
 df_acs['GEO_ID'] = df_acs['GEO_ID'].str.replace('1400000US', '')
 df_acs['GEO_ID_matches'] = np.where(df_acs.GEO_ID.isin(h2ajobs.GEOID), "MATCH", 'NO_MATCH')
-df_acs['GEO_ID_matches'].value_counts()
 df_acs = df_acs[df_acs["GEO_ID_matches"]=="MATCH"]
 df_acs.drop(["GEO_ID_matches"], axis=1, inplace=True)
 
@@ -132,7 +132,7 @@ for group, data in group_co_tract_varg:
     # flag = flag + 1
 
 percentages_all_groups = pd.concat(df_acs_long_percentage)
-percentages_all_groups.head()
+print(percentages_all_groups.head())
 percentages_all_groups.columns = ['county', 'tract', 'variable_prefix',
                                   'variable_suffix', 'percentage']
 
@@ -180,8 +180,10 @@ nonpercentages_wide_pivot_reset = nonpercentages_wide_pivot.reset_index()
 
 
 ## check shape of nonpercentage and percentage data
-nonpercentages_wide_pivot_reset.shape
-percentages_wide_pivot_reset.shape
+print("nonpercentages_wide_pivot_reset shape")
+print(nonpercentages_wide_pivot_reset.shape)
+print("percentages_wide_pivot_reset shape")
+print(percentages_wide_pivot_reset.shape)
 
 ## check what is lost in percentage/nonpercentage
 # not_in_percentage_tract = nonpercentages_wide_pivot_reset.merge(non_percentage_df_acs_beforenpnan_pivot_reset, how = 'outer',indicator=True, on="county_tract").loc[lambda x : x['_merge']=='right_only']
@@ -191,7 +193,8 @@ percentages_wide_pivot_reset.shape
 
 ####################################### Merge percentage with nonpercentage variables ##################################
 final_merge = nonpercentages_wide_pivot_reset.merge(percentages_wide_pivot_reset, how = 'left', on= "county_tract")
-
+print("find merge shape")
+print(final_merge.shape)
 
 ####################################### Find and add back missing tract ##################################
 
@@ -212,6 +215,9 @@ percentages_wide_pivot_reset['county_tract'].astype("string")
 missing_tract_inpercentage=percentages_wide_pivot_reset[percentages_wide_pivot_reset['county_tract'].isin(missing_tract)]
 # if missing tract occurs in nonpercentage data
 missing_tract_innonpercentage=nonpercentages_wide_pivot_reset[nonpercentages_wide_pivot_reset['county_tract'].isin(missing_tract)]
+
+missing_tract_innonpercentage.empty
+missing_tract_inpercentage.empty
 
 ## add back missing tract in the final percentage/nonpercentage data
 def add_missing_tract():
@@ -252,13 +258,13 @@ def add_missing_tract():
         missing_tract_var = missing_tract_var.append(pd.DataFrame(tract_add_back))
         final_merge_with_missing = pd.concat([final_merge, missing_tract_var])
         return final_merge_with_missing
-add_missing_tract()
+
+final_merge_with_missing = add_missing_tract()
 
 ## test: should be 6105 rows for 2014 data
-#final_merge_with_missing.shape
 
 
 ## write final dataframe to pick
-final_merge_with_missing.to_pickle(PREDICTORS_WRITEFOLDER + "acs_tract_percentage" + str(YEAR) + ".pkl")
+final_merge_with_missing.to_pickle("/Users/euniceliu/Dropbox (Dartmouth College)/qss20_finalproj_rawdata/summerwork/intermediate/acs_tract_percentage_2019.pkl")
 
-# pd.to_pickle(final_merge_with_missing, "acs_2014_percentagefinal")
+# final_merge_with_missing.to_pickle(PREDICTORS_WRITEFOLDER + "acs_tract_percentage" + str(YEAR) + ".pkl")
