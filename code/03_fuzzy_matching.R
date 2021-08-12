@@ -41,16 +41,31 @@ find_status <- function(one){
   
 }
 
+# creates the desired vector to search for names with a "-" and then a state name or abbreviation
+state_abbreviations <- state.abb
+state_full_names <- state.name
+state_abbreviations_and_names <- c(state_abbreviations, state_full_names)
+state_abbreviations_and_names_upper <- toupper(state_abbreviations_and_names)
+with_dash <- paste("- ", state_abbreviations_and_names_upper, sep = "")
+with_semi <- paste("; ", state_abbreviations_and_names_upper, sep = "")
+dash_and_semi <- c(with_dash, with_semi)
+state_abbreviations_and_names_upper_collapsed <- paste(dash_and_semi, collapse = '|')
+
+
 # function to clean the EMPLOYER_NAME in approved_only (h2a apps) and legal_name in violations (WHD data)
 clean_names <- function(one){
   
   string_version = toString(one) # convert to string
   upper_only <- toupper(string_version) # convert to uppercase
-  pattern <- "(LLC|CO|INC)\\.|\\," # locate the LLC, CO, or INC that are followed by a period
-  res <- trimws(gsub(pattern, "", upper_only))
+  upper_only_cleaned <- gsub(state_abbreviations_and_names_upper_collapsed, "", upper_only)
+  sub_2 <- "&NDASH| (LLC|CO|INC)" # locate the LLC, CO, or INC that come after a space, and get rid of weird ndash bug
+  almost_done <- gsub(sub_2, "", upper_only_cleaned)
+  pattern <- "[[:punct:]]+$"
+  res <- trimws(gsub(pattern, "", almost_done))
   return(res)
   
 }
+
 
 #####################
 # Fuzzy Matching Functions
@@ -132,6 +147,26 @@ approved_only$name <- emp_name_app
 
 emp_name_i =  unlist(lapply(investigations_filtered$legal_name, clean_names))
 investigations_filtered$name <- emp_name_i 
+
+co = 0
+inc = 0
+llc = 0
+for (name in approved_only$name) {
+  if (word(name, -1) == "CO") {
+    co = co + 1
+    print(name)
+  }
+  if (word(name, -1) == "INC") {
+    inc = inc + 1
+    print(name)
+  }
+  if (word(name, -1) == "LLC") {
+    llc = llc + 1
+    print(name)
+  }
+}
+sprintf("%s companies end in CO, %s companies end in INC, and %s companies end in LLC", co, inc, llc)
+
 
 # Clean up the city names
 approved_only <- approved_only %>%
@@ -297,9 +332,8 @@ if(RUN_FULL_MATCH){
 }
 
 #################
-# Adjust the jobs_group_id
+# Adjust the jobs_group_id, will move this to end of script
 #################
-
 
 # see if any jobs groups contain more than one state
 #test <- approved_deduped_clean %>%
@@ -351,6 +385,7 @@ investigations_toadd_wjobid = merge(investigations_toadd,
   rename(city_investigations = city,
          name_investigations = name)
 
+
 ## add blank cols for the jobs cols before rbind
 cols_toadd = setdiff(colnames(all_states_final_df), colnames(investigations_toadd_wjobid))
 cols_tocbind = data.frame(matrix(NA, nrow = nrow(investigations_toadd_wjobid),
@@ -392,7 +427,7 @@ matchres_allinvest_fill <- matchres_allinvest_fill %>%
 # Then concatenate this part2 index with the original index to create a new and more accurate index
 matchres_allinvest_fill$investigations_group_id <- str_c(matchres_allinvest_fill$investigations_group_id_part1, matchres_allinvest_fill$investigations_group_id_part2, sep = "_")
 
-# confirm that this worked succesfully
+# confirm that this worked successfully
 test <- matchres_allinvest_fill %>%
   group_by(investigations_group_id) %>%
   mutate(is_same_state = ifelse(length(unique(st_cd)) == 1, TRUE, FALSE)) %>%
@@ -415,15 +450,23 @@ jobs_removed_whendedup = approved_deduped_clean %>% filter(!jobs_row_id %in% app
 
 ## rowbind them using NA for the new cols and fill values for those cols using the jobs_group_id so that
 ## all jobs within the same deduplicated group get same values for investigations
-cols_toadd = setdiff(colnames(matchres_allinvest_fill), colnames(jobs_removed_whendedup))
-cols_tocbind = data.frame(matrix(NA, nrow = nrow(jobs_removed_whendedup),
-                                 ncol = length(cols_toadd)))
-colnames(cols_tocbind) = cols_toadd
-jobs_removed_whendedup_torbind = cbind.data.frame(jobs_removed_whendedup,
-                                                  cols_tocbind) 
 
-matchres_allinvest_alljobs = rbind.data.frame(matchres_allinvest_fill,
-                                              jobs_removed_whendedup_torbind) 
+#############
+# IGNORING THIS FOR NOW WHILE CONSTRUCTING NESTED LOOP
+###############
+# cols_toadd = setdiff(colnames(matchres_allinvest_fill), colnames(jobs_removed_whendedup))
+# cols_tocbind = data.frame(matrix(NA, nrow = nrow(jobs_removed_whendedup),
+                                 # ncol = length(cols_toadd)))
+# colnames(cols_tocbind) = cols_toadd
+# jobs_removed_whendedup_torbind = cbind.data.frame(jobs_removed_whendedup,
+                                                  # cols_tocbind) 
+
+# matchres_allinvest_alljobs = rbind.data.frame(matchres_allinvest_fill,
+                                              # jobs_removed_whendedup_torbind) 
+
+##############
+# UN-IGNORING
+##############
 
 ## pull group ids with any investigations and work on filling
 ## basically, within a group of jobs, want to (1) take values from
@@ -432,34 +475,70 @@ matchres_allinvest_alljobs = rbind.data.frame(matchres_allinvest_fill,
 job_groups_with_investigations = matchres_allinvest_fill$jobs_group_id[matchres_allinvest_fill$is_matched_investigations]
 job_groups_without_investigations = matchres_allinvest_fill$jobs_group_id[!matchres_allinvest_fill$is_matched_investigations]
 
-
-## stopped here: remaining steps: (2) with the ones with investigations, do above filling procedure - 
-## i think grouping by job_group_id alone wont work because if a given job group matched to multiple investigations, 
-## we want to fill with all those values - might necessitate change in jobs-focused rowbind code (i think investigations rowbind is fine)
-# test to make sure all job groups are within the same state
-
-
 # (1) filter based on job_group_id to two dfs: (1) job groups with investigations
-job_groups_with_investigations_df <- matchres_allinvest_alljobs %>%
+job_groups_with_investigations_df <- matchres_allinvest_fill %>%
   filter(jobs_group_id %in% job_groups_with_investigations)
 
-job_groups_without_investigations_df <- matchres_allinvest_alljobs %>%
+job_groups_without_investigations_df <- matchres_allinvest_fill %>%
   filter(jobs_group_id %in% job_groups_without_investigations)
 
-# (2) with the ones with investigations, do above filling procedure
-for (id in matchres_allinvest_fill$jobs_group_id)
-{
-  temp_data <- jobs_removed_whendedup %>%
-    filter(jobs_group_id == id)
+# for each job with investigations, loop over each investigation it has, and bind it with
+# the correct number of empty rows/columns for observations lost during de-duplication.
+# then rbind each of these investigations together into a df, and add them to
+# list_of_dfs_to_rbind. eventually we will use do.call to create our full re-duplicated
+# data set, minus jobs that did NOT match to an investigation
+
+# create empty list
+list_of_dfs_to_rbind <- vector(mode = "list")
+
+# for each group_id that matched to an investigation,
+for (group_id in job_groups_with_investigations_df$jobs_group_id)
+  {
   
-  # continue ...
+  # isolate the investigations that matched to this jobs_group_id
+  temp_data <- matchres_allinvest_fill %>%
+    filter(jobs_group_id == group_id)
   
+  
+  # then for each investigation in this dataset,
+  for (row_id in temp_data$investigations_row_id)
+  {
+    
+    # isolate the row with the investigation
+    each_investigation <- temp_data %>%
+      filter(investigations_row_id == row_id)
+    
+    # re-duplicate for this particular investigation
+    particular_jobs_removed_when_dedup <- jobs_removed_whendedup %>% # is there an issue if this is an empty dataset
+      filter(jobs_group_id == group_id)
+    
+    cols_toadd = setdiff(colnames(each_investigation), colnames(jobs_removed_whendedup))
+    
+    cols_tocbind = data.frame(matrix(NA, nrow = nrow(particular_jobs_removed_when_dedup),
+                                     ncol = length(cols_toadd)))
+    
+    colnames(cols_tocbind) = cols_toadd
+    
+    jobs_removed_whendedup_torbind = cbind.data.frame(particular_jobs_removed_when_dedup,
+                                                      cols_tocbind) %>% mutate(is_matched_investigations = TRUE)
+    
+    
+    # then bind these back onto "temp_data", updating it
+    # global/local issue? 
+    temp_data <<- rbind.data.frame(temp_data, jobs_removed_whendedup_torbind)
+
+  }
+  
+  # update the list
+  list_of_dfs_to_rbind <- c(list_of_dfs_to_rbind, temp_data)
 }
 
-# We accidentally assigned investigations_group_id_part2's to some of the values that do not match
-# an investigation. Let's correct that now
-job_groups_without_investigations_df <- job_groups_without_investigations_df %>%
-  mutate(investigations_group_id_part2 = NA)
+# loop takes about 10 mins to run
 
+saveRDS(list_of_dfs_to_rbind, "intermediate/list_of_dfs_to_rbind.RDS")
+# bind these all together
+all_jobs_with_investigations <- do.call(rbind.data.frame, list_of_dfs_to_rbind)
 
-# eventually, fix jobs_group_id
+# getting "vector memory exhausted" error after ~6 mins
+
+# from here we can group_by jobs_group_id and invesetigations_row_id to fill the NA's
