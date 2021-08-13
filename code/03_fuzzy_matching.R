@@ -182,7 +182,7 @@ investigations_filtered <- investigations_filtered %>%
 
 # job postings data
 dedupe_fields = c("name")
-RUN_DEDUPE_JOBS = TRUE
+RUN_DEDUPE_JOBS = FALSE
 if(RUN_DEDUPE_JOBS){
   
   approved_matches <- fastLink(dfA = approved_only,
@@ -209,6 +209,42 @@ approved_deduped_clean = approved_deduped %>%
   mutate(jobs_row_id = 1:nrow(approved_deduped)) %>%
   rename(jobs_group_id = dedupe.ids)
 
+# adjust jobs_group_id, as it has some jobs that occurred in different states in the same group
+# first see if any jobs groups contain more than one state
+test <- approved_deduped_clean %>%
+  group_by(jobs_group_id) %>%
+  mutate(is_same_state = ifelse(length(unique(state_formatch)) == 1, TRUE, FALSE)) %>%
+  ungroup()
+
+table(test$is_same_state) # looks like we have some jobs that span multiple states
+
+# Thus, adjust the jobs_group_id so that each combination of jobs_group_id and state maps to a unique index
+# First create a part 2 of the index that will correspond to the state within a particular jobss_group_id
+approved_deduped_clean <- approved_deduped_clean %>%
+  group_by(jobs_group_id) %>%
+  mutate(jobs_group_id_part2 = as.integer(factor(state_formatch))) %>%
+  ungroup() %>%
+  rename(jobs_group_id_part1 = jobs_group_id)
+
+# Then concatenate this part2 index with the original index to create a new and more accurate index
+approved_deduped_clean$jobs_group_id <- str_c(approved_deduped_clean$jobs_group_id_part1, approved_deduped_clean$jobs_group_id_part2, sep = "_")
+
+# confirm that is_same_state is all TRUE now
+test <- approved_deduped_clean %>%
+  group_by(jobs_group_id) %>%
+  mutate(is_same_state = ifelse(length(unique(state_formatch)) == 1, TRUE, FALSE)) %>%
+  ungroup()
+
+table(test$is_same_state) # all are TRUE,this was successful
+
+# also confirm that investigations matched during de-deduping and in the same state have the same id
+test <- approved_deduped_clean %>%
+  group_by(jobs_group_id_part1, state_formatch) %>%
+  mutate(is_same_id = ifelse(length(unique(jobs_group_id)) == 1, TRUE, FALSE)) %>%
+  ungroup()
+
+table(test$is_same_id) # all are TRUE,this was successful
+
 # save before we filter out duplicates pre match
 saveRDS(approved_deduped_clean, "intermediate/approved_only_pre_deduping.RDS")
 
@@ -226,9 +262,9 @@ approved_deduped_formatch <- approved_deduped_clean %>%
 stopifnot(length(unique(approved_deduped_formatch$jobs_group_id)) == nrow(approved_deduped_formatch))
 
 
-# deduping of  investigations
+# deduping of investigations
 
-RUN_DEDUPE_I = TRUE
+RUN_DEDUPE_I = FALSE
 if(RUN_DEDUPE_I){
   
   investigations_matches <- fastLink(dfA = investigations_filtered,
@@ -255,6 +291,42 @@ sprintf("After deduplicating the filtered investigations data, we go from %s uni
 investigations_deduped_clean = investigations_deduped %>%
   mutate(investigations_row_id = 1:nrow(investigations_deduped)) %>%
   rename(investigations_group_id = dedupe.ids)
+
+# adjust investigations_group_id, as it has some investigations that occurred in different states in the same group
+# see if any investigations groups contain more than one state
+test <- investigations_deduped_clean %>%
+  group_by(investigations_group_id) %>%
+  mutate(is_same_state = ifelse(length(unique(st_cd)) == 1, TRUE, FALSE)) %>%
+  ungroup()
+
+table(test$is_same_state) # looks like we have some investigations that span multiple states
+
+# Thus, adjust the investigations_group_id so that each combination of investigations_group_id and state maps to a unique index
+# First create a part 2 of the index that will correspond to the state within a particular investigations_group_id
+investigations_deduped_clean <- investigations_deduped_clean %>%
+  group_by(investigations_group_id) %>%
+  mutate(investigations_group_id_part2 = as.integer(factor(st_cd))) %>%
+  ungroup() %>%
+  rename(investigations_group_id_part1 = investigations_group_id)
+
+# Then concatenate this part2 index with the original index to create a new and more accurate index
+investigations_deduped_clean$investigations_group_id <- str_c(investigations_deduped_clean$investigations_group_id_part1, investigations_deduped_clean$investigations_group_id_part2, sep = "_")
+
+# confirm that this worked successfully
+test <- investigations_deduped_clean %>%
+  group_by(investigations_group_id) %>%
+  mutate(is_same_state = ifelse(length(unique(st_cd)) == 1, TRUE, FALSE)) %>%
+  ungroup()
+
+table(test$is_same_state) # all are TRUE,this was successful
+
+# also confirm that investigations matched during de-deduping and in the same state have the same id
+test <- investigations_deduped_clean %>%
+  group_by(investigations_group_id_part1, st_cd) %>%
+  mutate(is_same_id = ifelse(length(unique(investigations_group_id)) == 1, TRUE, FALSE)) %>%
+  ungroup()
+
+table(test$is_same_id) # all are TRUE,this was successful
 
 # save before we filter out duplicates
 saveRDS(investigations_deduped_clean, "intermediate/investigations_filtered_pre_deduping.RDS")
@@ -332,36 +404,6 @@ if(RUN_FULL_MATCH){
 }
 
 #################
-# Adjust the jobs_group_id, will move this to end of script
-#################
-
-# see if any jobs groups contain more than one state
-#test <- approved_deduped_clean %>%
-  #group_by(jobs_group_id) %>%
-  #mutate(is_same_state = ifelse(length(unique(state_formatch)) == 1, TRUE, FALSE)) %>%
-  #ungroup()
-
-#table(test$is_same_state) # we can see that many jobs that we assumed were the same were actually in different states
-## thus we make a new jobs_group_id that will reflect this
-
-#all_states_final_df <- all_states_final_df %>%
-  #group_by(jobs_group_id) %>%
-  #mutate(jobs_group_id_part2 = row_number()) %>%
-  #ungroup() %>%
-  #rename(jobs_group_id_part1 = jobs_group_id)
-
-#all_states_final_df$jobs_group_id <- str_c(all_states_final_df$jobs_group_id_part1, all_states_final_df$jobs_group_id_part2, sep = "_")
-
-# make sure job groups now do not contain more than one state
-#test <- all_states_final_df %>%
-  #group_by(jobs_group_id) %>%
-  #mutate(is_same_state = ifelse(length(unique(state_formatch)) == 1, TRUE, FALSE)) %>%
-  #ungroup()
-
-#table(test$is_same_state)
-
-
-#################
 # Add duplicates back in: investigations
 #################
 
@@ -406,34 +448,6 @@ matchres_allinvest_fill = matchres_allinvest %>% group_by(investigations_group_i
 test_investigation = investigations_torbind %>% slice(1) %>% pull(investigations_group_id)
 head(investigations_toadd_wjobid %>% filter(investigations_group_id %in% test_investigation))
 View(matchres_allinvest_fill %>% filter(investigations_group_id %in% test_investigation) %>% select(contains("id")))
-
-# adjust investigations_group_id, as it has some investigations that occurred in different states in the same group
-# see if any investigations groups contain more than one state
-test <- matchres_allinvest_fill %>%
-  group_by(investigations_group_id) %>%
-  mutate(is_same_state = ifelse(length(unique(st_cd)) == 1, TRUE, FALSE)) %>%
-  ungroup()
-
-table(test$is_same_state) # looks like we have some investigations that span multiple states
-
-# Thus, adjust the investigations_group_id so that each combination of investigations_group_id and state maps to a unique index
-# First create a part 2 of the index that will correspond to the state within a particular investigations_group_id
-matchres_allinvest_fill <- matchres_allinvest_fill %>%
-  group_by(investigations_group_id) %>%
-  mutate(investigations_group_id_part2 = row_number()) %>%
-  ungroup() %>%
-  rename(investigations_group_id_part1 = investigations_group_id)
-
-# Then concatenate this part2 index with the original index to create a new and more accurate index
-matchres_allinvest_fill$investigations_group_id <- str_c(matchres_allinvest_fill$investigations_group_id_part1, matchres_allinvest_fill$investigations_group_id_part2, sep = "_")
-
-# confirm that this worked successfully
-test <- matchres_allinvest_fill %>%
-  group_by(investigations_group_id) %>%
-  mutate(is_same_state = ifelse(length(unique(st_cd)) == 1, TRUE, FALSE)) %>%
-  ungroup()
-
-table(test$is_same_state) # all are TRUE,this was succesful
 
 #################
 # Add duplicates back in: jobs
@@ -518,7 +532,7 @@ for (group_id in job_groups_with_investigations_df$jobs_group_id)
                                      ncol = length(cols_toadd)))
     
     colnames(cols_tocbind) = cols_toadd
-    
+    #should include investigations_row_id somewhere in here for filling later
     jobs_removed_whendedup_torbind = cbind.data.frame(particular_jobs_removed_when_dedup,
                                                       cols_tocbind) %>% mutate(is_matched_investigations = TRUE)
     
@@ -539,6 +553,19 @@ saveRDS(list_of_dfs_to_rbind, "intermediate/list_of_dfs_to_rbind.RDS")
 # bind these all together
 all_jobs_with_investigations <- do.call(rbind.data.frame, list_of_dfs_to_rbind)
 
-# getting "vector memory exhausted" error after ~6 mins
+# getting "vector memory exhausted" error after ~ 5 mins
 
 # from here we can group_by jobs_group_id and invesetigations_row_id to fill the NA's
+
+#################
+# TEST
+#################
+
+
+# We accidentally assigned investigations_group_id_part2's to some of the values that do not match
+# an investigation. Let's correct that now
+#job_groups_without_investigations_df <- job_groups_without_investigations_df %>%
+  #mutate(investigations_group_id_part2 = NA)
+
+
+# eventually, fix jobs_group_id
