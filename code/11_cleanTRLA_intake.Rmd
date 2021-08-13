@@ -1,7 +1,7 @@
 ---
 title: "trla_cleaning"
-author: "Rebecca Johnson"
-date: "8/3/2021"
+author: "Lizzie Shackney"
+date: "8/13/2021"
 output: html_document
 ---
 
@@ -18,13 +18,17 @@ library(readxl)
 library(here)
 library(lubridate)
 
+#My path
+user = "C:/Users/Austin Paralegal"
+
+getwd()
 ## Path to data
 RUN_FROM_CONSOLE = FALSE
 if(RUN_FROM_CONSOLE){
   args <- commandArgs(TRUE)
   DATA_DIR = args[1]
 } else{
-  DATA_DIR = "~/Dropbox/qss20_finalproj_rawdata/summerwork"
+  DATA_DIR = paste0(user, "/Dropbox/qss20_finalproj_rawdata/summerwork")
 }
 ```
 
@@ -36,22 +40,9 @@ trla_orig = read_excel(sprintf("%s/raw/Adverse_Parties_FW_TRLA.xlsx", DATA_DIR))
     mutate(`Intake Date` = ymd(`Intake Date`))
 
 ## load second set of data
-trla_more = read_excel(sprintf("%s/raw/master consol - redacted.xls", DATA_DIR)) %>%
-  select(-c("closed","date_closed"))
-
-```
-
-
-Dropbox workaround data loading:
-```{r warning=FALSE}
-
-##DROPBOX WORKAROUND -- DELETE LATER!
-trla_orig <- read_excel("../../raw_workaround/Adverse_Parties_FW_TRLA.xlsx") %>%
-    mutate(`Intake Date` = ymd(`Intake Date`))
-           
-##DROPBOX WORKAROUND -- DELETE LATER!
-trla_more = read_excel("../../raw_workaround/master consol - redacted 2.xls") %>%
+trla_more = read_excel(sprintf("%s/raw/master consol - redacted 2.xls", DATA_DIR)) %>%
   select(-c("closed","date_close"))
+
 ```
 
 
@@ -192,10 +183,12 @@ print(sprintf("There are %s case numbers across both datasets with no AP in eith
 #really not sure how to do this without a clear separator for the trla_more opponent data
 #just eyeballing it, does not seem like a major issue
 
+#filter dataset with only unique trla_more rows
 trla_more_unique <- trla_more %>%
   anti_join(trla_orig2, by = c("case_number")) %>%
   filter(intake_date >= ymd("2014-01-01"))
 
+#merge trla_orig data and trla_more
 trla_merge <- trla_orig2 %>%
   
   #If trla_more has distinct case numbers...
@@ -212,10 +205,15 @@ trla_merge <- trla_orig2 %>%
                                                    is.na(derived_opponent_consolidated.x) ~ derived_opponent_consolidated.y),
          
     #note source of AP
-    derived_source2 = case_when(is.na(derived_opponent_consolidated) ~ "NA",
+    derived_source2 = case_when(is.na(derived_opponent_consolidated) ~ NA_character_,
                                         id == "2" ~ "trla_more",
                                         is.na(derived_opponent_consolidated.x) ~ "trla_more",
                                         TRUE ~ "trla_orig"),
+    
+    derived_opponent_source = case_when((derived_opponent_source == "Missing all" & !is.na(derived_opponent_consolidated)) ~ "trla_more",
+                                        !is.na(derived_opponent_source) ~ derived_opponent_source,
+                                        (is.na(derived_opponent_source) & derived_source2=="trla_more") ~ "trla_more",
+                                        TRUE ~ "Missing all"),
     
          #for recalculating missing APs
     missing_AP = ifelse(is.na(derived_opponent_consolidated),TRUE,FALSE),
@@ -223,11 +221,13 @@ trla_merge <- trla_orig2 %>%
     count_AP_states.y = ifelse(derived_source2 == "trla_more", str_count(opstate.y, ",") + 1,NA)
   ) 
 
+
+sum(trla_merge$count_AP_states.y[trla_merge$derived_source2 == "trla_more"], na.rm = TRUE)
 ```
 
 ```{r}
 
-#Checking the additional rows added in the first step
+#Checking the additional rows added
 View(trla_merge %>%
   filter(id == "2"))
 
@@ -239,7 +239,7 @@ trla_merge %>%
 
 #Overall, we get the number of missing APs we were expecting, but fewer because we filtered out pre-2014 for the unique trla_more rows
 trla_merge %>%
-      group_by(missing_AP) %>%
+      group_by(derived_opponent_source) %>%
        summarise(n())
 
 ```
@@ -247,13 +247,20 @@ trla_merge %>%
 We'd want to separate out the AP names prior to this step -- there would only be ~250 to separate.
 
 Separate states & filter out government agencies & intakes missing AP:
+
 ```{r}
 trla_merge2 <- trla_merge %>%
-  separate_rows(opstate.y, sep = ",") %>%
-  mutate(derived_opponent_state = case_when(is.na(opstate.x) ~ opstate.y, 
+  
+  mutate(derived_opponent_state = case_when(!is.na(derived_opponent_state) ~ derived_opponent_state,
+                                            is.na(opstate.x) ~ opstate.y, 
                                             TRUE ~ opstate.x)) %>%
-  select(c("intake_date.x", "derived_opponent_consolidated", "derived_opponent_state", "derived_opponent_city", "missing_AP", "count_AP_states.y", "derived_is_notemp")) %>%
+  
+    separate_rows(derived_opponent_state, sep = ",")  %>%
+  
+  select(c("case_number","intake_date.x", "derived_opponent_consolidated", "derived_opponent_state", "derived_opponent_city", "missing_AP", "count_AP_states.y", "derived_is_notemp", "derived_opponent_source")) %>%
+  
   filter(!derived_is_notemp & !missing_AP) %>%
+  
   select(-c("derived_is_notemp", "missing_AP"))
 
 ```
