@@ -3,7 +3,7 @@
 # Author: Cam Guage 
 # Written: 6/29/2021
 ##########################
-
+# 11:26
 ##########################
 # Packages and Imports
 ##########################
@@ -148,25 +148,6 @@ approved_only$name <- emp_name_app
 emp_name_i =  unlist(lapply(investigations_filtered$legal_name, clean_names))
 investigations_filtered$name <- emp_name_i 
 
-co = 0
-inc = 0
-llc = 0
-for (name in approved_only$name) {
-  if (word(name, -1) == "CO") {
-    co = co + 1
-    print(name)
-  }
-  if (word(name, -1) == "INC") {
-    inc = inc + 1
-    print(name)
-  }
-  if (word(name, -1) == "LLC") {
-    llc = llc + 1
-    print(name)
-  }
-}
-sprintf("%s companies end in CO, %s companies end in INC, and %s companies end in LLC", co, inc, llc)
-
 
 # Clean up the city names
 approved_only <- approved_only %>%
@@ -182,7 +163,7 @@ investigations_filtered <- investigations_filtered %>%
 
 # job postings data
 dedupe_fields = c("name")
-RUN_DEDUPE_JOBS = FALSE
+RUN_DEDUPE_JOBS = TRUE
 if(RUN_DEDUPE_JOBS){
   
   approved_matches <- fastLink(dfA = approved_only,
@@ -264,7 +245,7 @@ stopifnot(length(unique(approved_deduped_formatch$jobs_group_id)) == nrow(approv
 
 # deduping of investigations
 
-RUN_DEDUPE_I = FALSE
+RUN_DEDUPE_I = TRUE
 if(RUN_DEDUPE_I){
   
   investigations_matches <- fastLink(dfA = investigations_filtered,
@@ -403,6 +384,7 @@ if(RUN_FULL_MATCH){
   all_states_final_df = readRDS("intermediate/fuzzy_matching_final.RDS") %>% select(-index)
 }
 
+
 #################
 # Add duplicates back in: investigations
 #################
@@ -465,22 +447,7 @@ jobs_removed_whendedup = approved_deduped_clean %>% filter(!jobs_row_id %in% app
 ## rowbind them using NA for the new cols and fill values for those cols using the jobs_group_id so that
 ## all jobs within the same deduplicated group get same values for investigations
 
-#############
-# IGNORING THIS FOR NOW WHILE CONSTRUCTING NESTED LOOP
-###############
-# cols_toadd = setdiff(colnames(matchres_allinvest_fill), colnames(jobs_removed_whendedup))
-# cols_tocbind = data.frame(matrix(NA, nrow = nrow(jobs_removed_whendedup),
-                                 # ncol = length(cols_toadd)))
-# colnames(cols_tocbind) = cols_toadd
-# jobs_removed_whendedup_torbind = cbind.data.frame(jobs_removed_whendedup,
-                                                  # cols_tocbind) 
 
-# matchres_allinvest_alljobs = rbind.data.frame(matchres_allinvest_fill,
-                                              # jobs_removed_whendedup_torbind) 
-
-##############
-# UN-IGNORING
-##############
 
 ## pull group ids with any investigations and work on filling
 ## basically, within a group of jobs, want to (1) take values from
@@ -502,17 +469,23 @@ job_groups_without_investigations_df <- matchres_allinvest_fill %>%
 # list_of_dfs_to_rbind. eventually we will use do.call to create our full re-duplicated
 # data set, minus jobs that did NOT match to an investigation
 
-# create empty list
-list_of_dfs_to_rbind <- vector(mode = "list")
+# first, a test
+test_df <- job_groups_with_investigations_df %>%
+  sample_n(5)
+
+# create list
+# id_4 <- "1378_3"
+list_of_dfs_to_rbind <- list()
 
 # for each group_id that matched to an investigation,
-for (group_id in job_groups_with_investigations_df$jobs_group_id)
-  {
+for (group_id in unique(job_groups_with_investigations_df$jobs_group_id))
+  { 
   
   # isolate the investigations that matched to this jobs_group_id
   temp_data <- matchres_allinvest_fill %>%
     filter(jobs_group_id == group_id)
   
+  rbound_df <- data.frame()
   
   # then for each investigation in this dataset,
   for (row_id in temp_data$investigations_row_id)
@@ -536,36 +509,152 @@ for (group_id in job_groups_with_investigations_df$jobs_group_id)
     jobs_removed_whendedup_torbind = cbind.data.frame(particular_jobs_removed_when_dedup,
                                                       cols_tocbind) %>% mutate(is_matched_investigations = TRUE)
     
+    # bind onto the original observation in order to fill
+    reduped_investigation <- rbind.data.frame(each_investigation, jobs_removed_whendedup_torbind)
+    
+    # fill in the NA investigations rows of duplicates
+    investigations_cols = cols_toadd
+    reduped_investigation_fill = reduped_investigation %>%
+      fill(investigations_cols, .direction = "downup")
+
     
     # then bind these back onto "temp_data", updating it
     # global/local issue? 
-    temp_data <<- rbind.data.frame(temp_data, jobs_removed_whendedup_torbind)
+    rbound_df <<- rbind.data.frame(rbound_df, reduped_investigation_fill)
+    
+    # i dont think this will include the jobs that were not removed- do we need to merge on ?
 
   }
   
-  # update the list
-  list_of_dfs_to_rbind <- c(list_of_dfs_to_rbind, temp_data)
+  # update the vector
+  list_of_dfs_to_rbind <- c(list_of_dfs_to_rbind, list(rbound_df))
 }
-
-# loop takes about 10 mins to run
+# 2:21, 2:28
 
 saveRDS(list_of_dfs_to_rbind, "intermediate/list_of_dfs_to_rbind.RDS")
 # bind these all together
 all_jobs_with_investigations <- do.call(rbind.data.frame, list_of_dfs_to_rbind)
 
-# getting "vector memory exhausted" error after ~ 5 mins
+# check that the output is as expected:
+# choose 3 jobs that had investigations and confirm the re-duplication was correct
 
-# from here we can group_by jobs_group_id and invesetigations_row_id to fill the NA's
+test_df <- job_groups_with_investigations_df[sample(nrow(job_groups_with_investigations_df), 3), ]
+
+# Check the first
+# grab its group_id
+id_1 <- test_df$jobs_group_id[1]
+
+# see if it had any duplicates
+View(approved_deduped_clean %>%
+  filter(jobs_group_id == id_1)) # it did not
+
+# see how many investigations it mapped to
+View(matchres_allinvest_fill %>%
+  filter(jobs_group_id == id_1)) # just 1
+
+# make sure we just get one row in re-duplication
+View(all_jobs_with_investigations %>%
+  filter(jobs_group_id == id_1)) # we do
+
+# Check the second
+# grab its group_id
+id_2 <- test_df$jobs_group_id[2]
+
+# see if it had any duplicates
+View(approved_deduped_clean %>%
+  filter(jobs_group_id == id_2)) # 12 duplicates
+
+# see how many investigations it mapped to
+View(matchres_allinvest_fill %>%
+  filter(jobs_group_id == id_2)) # just 1
+
+# make sure we get 13 rows in re-duplication, and that they're filled correctly
+View(all_jobs_with_investigations %>%
+  filter(jobs_group_id == id_2)) # we do
+
+# Check the third
+# grab its group_id
+id_3 <- test_df$jobs_group_id[3]
+
+# see if it had any duplicates
+View(approved_deduped_clean %>%
+  filter(jobs_group_id == id_3)) # 8 duplicates
+
+# see how many investigations it mapped to
+View(matchres_allinvest_fill %>%
+  filter(jobs_group_id == id_3)) # just 1
+
+# make sure we get 9 rows during re-duplication, and they are filled correctly
+View(all_jobs_with_investigations %>%
+  filter(jobs_group_id == id_3)) # we do
+
+# find one with multiple investigations, no duplicates
+matchres_allinvest_fill %>%
+  group_by(jobs_row_id) %>%
+  summarize(n = n()) %>%
+  arrange(-n)
+
+# now lets look for one with duplicates and multiple investigations
+id_4 <- "1378_3"
+
+View(approved_deduped_clean %>%
+  filter(jobs_group_id == id_4)) # 24 duplicates
+
+# see how many investigations it mapped to
+View(matchres_allinvest_fill %>%
+  filter(jobs_group_id == id_4)) # 11 investigations
+
+# make sure we get 275 rows during re-duplication, and they are filled correctly
+test <- all_jobs_with_investigations %>%
+  filter(jobs_group_id == id_4) # we do!
+
 
 #################
-# TEST
+# Re-duplicate jobs that did not match to investigations
 #################
 
+# Isolate the jobs to merge on
+jobs_removed_whendedup_no_invest <- jobs_removed_whendedup %>%
+  filter(jobs_group_id %in% job_groups_without_investigations)
 
-# We accidentally assigned investigations_group_id_part2's to some of the values that do not match
-# an investigation. Let's correct that now
-#job_groups_without_investigations_df <- job_groups_without_investigations_df %>%
-  #mutate(investigations_group_id_part2 = NA)
+# carry out steps from before
+cols_toadd = setdiff(colnames(job_groups_without_investigations_df), colnames(jobs_removed_whendedup_no_invest))
+ cols_tocbind = data.frame(matrix(NA, nrow = nrow(jobs_removed_whendedup_no_invest),
+ ncol = length(cols_toadd)))
+ colnames(cols_tocbind) = cols_toadd
+ jobs_removed_whendedup_torbind_no_invest = cbind.data.frame(jobs_removed_whendedup_no_invest,
+                                                    cols_tocbind)
+ all_jobs_without_investigations = rbind.data.frame(job_groups_without_investigations_df,
+                                                jobs_removed_whendedup_torbind_no_invest) 
+ 
+ # need to fill!
+ investigations_cols = cols_toadd
+ all_jobs_without_investigations = all_jobs_without_investigations %>% group_by(jobs_group_id) %>%
+   fill(investigations_cols, .direction = "downup") %>%
+   ungroup() 
+ 
+# quick check
+ test_df <- job_groups_without_investigations_df[sample(nrow(job_groups_with_investigations_df), 3), ]
+ 
+ # Check the second, which has duplicates
+ # grab its group_id
+ id_2 <- test_df$jobs_group_id[2]
+ 
+ # see if it had any duplicates
+ View(approved_deduped_clean %>%
+        filter(jobs_group_id == id_2)) # it had 7
+ 
+ # see how many investigations it mapped to
+ View(matchres_allinvest_fill %>%
+        filter(jobs_group_id == id_2)) # none
+ 
+ # make sure we get 8 rows in re-duplication and they are filled correctt
+ View(all_jobs_without_investigations %>%
+        filter(jobs_group_id == id_2)) # we do
 
 
-# eventually, fix jobs_group_id
+# finally, combine all jobs with and without investigations
+ final_df <- rbind.data.frame(all_jobs_with_investigations, all_jobs_without_investigations)
+ 
+saveRDS(final_df, "intermediate/final_df.RDS")
+write.csv(final_df, "intermediate/final_df.csv")
