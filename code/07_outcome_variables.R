@@ -7,29 +7,33 @@
 ##########################
 # Packages and Imports
 ##########################
+
 library(lubridate)
 library(fastLink)
+library(tidyverse)
 
 RUN_FROM_CONSOLE = FALSE
 if(RUN_FROM_CONSOLE){
   args <- commandArgs(TRUE)
   DATA_DIR = args[1]
 } else{
-  DATA_DIR = "~/Dropbox (Dartmouth College)/qss20_finalproj_rawdata/summerwork"
+  #DATA_DIR = "~/Dropbox (Dartmouth College)/qss20_finalproj_rawdata/summerwork"
+  DATA_DIR = "C:/Users/Austin Paralegal/Dropbox/qss20_finalproj_rawdata/summerwork"
 }
-
 
 setwd(DATA_DIR)
 
 #####################
 # Loading in Data
 #####################
+
 # matched data with de-duped datasets
 matched_data <- readRDS("intermediate/final_df.RDS")
 
 ####################
 # Some descriptives
 ####################
+
 matched_data_no_invesitgations <- matched_data %>%
   filter(is_matched_investigations == FALSE)
 
@@ -58,22 +62,23 @@ sprintf("Our matched data has %s rows, %s unique employers, has %s%% of rows wit
 #####################
 
 matched_data <- matched_data %>%
-  mutate(findings_start_date = mdy(findings_start_date)) %>%
-  mutate(findings_end_date = mdy(findings_end_date)) %>%
-  mutate(JOB_START_DATE = ymd_hms(JOB_START_DATE)) %>% 
-  mutate(JOB_END_DATE = ymd_hms(JOB_END_DATE))
+  mutate(findings_start_date = mdy(findings_start_date),
+         findings_end_date = mdy(findings_end_date),
+         JOB_START_DATE = gsub(x = JOB_START_DATE, pattern = " 00:00:00", replacement = ""),
+         JOB_START_DATE = ymd(JOB_START_DATE),
+         JOB_END_DATE = gsub(x = JOB_END_DATE, pattern = " 00:00:00.000000", replacement = ""),
+         JOB_END_DATE = ymd(JOB_END_DATE))
 
-# Getting the following messages: 1: Problem with `mutate()` input `JOB_END_DATE`.ℹ  17415 failed to parse. ℹ Input `JOB_END_DATE` is `ymd_hms(JOB_END_DATE)`. 2:  17415 failed to parse. 
 
 #############################
 # Creating outcome variables
 #############################
 
 matched_data <- matched_data %>%
-  mutate(outcome_is_any_investigation = is_matched_investigations) %>%
-  mutate(outcome_is_investigation_aftersd = ifelse(is_matched_investigations & findings_start_date >= JOB_START_DATE, TRUE, FALSE)) %>%
-  mutate(outcome_is_investigation_before_sd = ifelse(is_matched_investigations & findings_start_date < JOB_START_DATE, TRUE, FALSE)) %>%
-  mutate(outcome_is_investigation_overlapsd = ifelse(is_matched_investigations & findings_start_date >= JOB_START_DATE & findings_start_date <= JOB_END_DATE, TRUE, FALSE))
+  mutate(outcome_is_any_investigation = is_matched_investigations,
+  outcome_is_investigation_aftersd = ifelse(is_matched_investigations & findings_start_date >= JOB_START_DATE, TRUE, FALSE),
+  outcome_is_investigation_before_sd = ifelse(is_matched_investigations & findings_start_date < JOB_START_DATE, TRUE, FALSE),
+  outcome_is_investigation_overlapsd = ifelse(is_matched_investigations & findings_start_date >= JOB_START_DATE & findings_start_date <= JOB_END_DATE, TRUE, FALSE))
 
 table(matched_data$outcome_is_any_investigation)
 table(matched_data$outcome_is_investigation_aftersd)
