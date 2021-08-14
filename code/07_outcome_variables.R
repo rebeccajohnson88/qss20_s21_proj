@@ -17,8 +17,8 @@ if(RUN_FROM_CONSOLE){
   args <- commandArgs(TRUE)
   DATA_DIR = args[1]
 } else{
-  #DATA_DIR = "~/Dropbox (Dartmouth College)/qss20_finalproj_rawdata/summerwork"
-  DATA_DIR = "C:/Users/Austin Paralegal/Dropbox/qss20_finalproj_rawdata/summerwork"
+  DATA_DIR = "~/Dropbox (Dartmouth College)/qss20_finalproj_rawdata/summerwork"
+  #DATA_DIR = "C:/Users/Austin Paralegal/Dropbox/qss20_finalproj_rawdata/summerwork"
 }
 
 setwd(DATA_DIR)
@@ -48,8 +48,6 @@ matched_data_deduped_byjob <- matched_data %>%
 matched_data_deduped_byjob_invest <- matched_data_deduped_byjob %>%
   filter(is_matched_investigations == TRUE)
 
-nrow(matched_data_deduped_byjob_invest)
-
 
 sprintf("Our matched data has %s rows, %s unique employers, has %s%% of rows with an investigation, and %s%% of employers with an investigation", 
         nrow(matched_data), length(unique(matched_data$jobs_group_id)), 
@@ -76,11 +74,14 @@ matched_data <- matched_data %>%
 
 matched_data <- matched_data %>%
   mutate(outcome_is_any_investigation = is_matched_investigations,
-  outcome_is_investigation_aftersd = ifelse(is_matched_investigations & findings_start_date >= JOB_START_DATE, TRUE, FALSE),
-  outcome_is_investigation_before_sd = ifelse(is_matched_investigations & findings_start_date < JOB_START_DATE, TRUE, FALSE),
-  outcome_is_investigation_overlapsd = ifelse(is_matched_investigations & findings_start_date >= JOB_START_DATE & findings_start_date <= JOB_END_DATE, TRUE, FALSE))
+         outcome_is_investigation_aftersd = ifelse(is_matched_investigations & findings_start_date >= JOB_START_DATE, TRUE, FALSE),
+         outcome_is_investigation_before_sd = ifelse(is_matched_investigations & findings_start_date < JOB_START_DATE, TRUE, FALSE),
+         outcome_is_investigation_overlapsd = ifelse(is_matched_investigations & findings_start_date >= JOB_START_DATE & findings_start_date <= JOB_END_DATE, TRUE, FALSE))
 
 table(matched_data$outcome_is_any_investigation)
 table(matched_data$outcome_is_investigation_aftersd)
 table(matched_data$outcome_is_investigation_before_sd)
 table(matched_data$outcome_is_investigation_overlapsd)
+
+saveRDS(final_df, "intermediate/final_with_outcomes.RDS")
+write.csv(final_df, "intermediate/final_with_outcomes.csv")
