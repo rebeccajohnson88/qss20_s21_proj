@@ -1,3 +1,5 @@
+# dummies?/"others" -> traintest -> imputation
+
 ##### imports
 import random
 import re
@@ -7,6 +9,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import os
+import pickle5 as pickle
 import recordlinkage
 from sklearn.compose import ColumnTransformer
 from sklearn.datasets import make_classification
@@ -18,8 +21,6 @@ from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_sc
 from sklearn.model_selection import cross_val_score
 from sklearn.model_selection import train_test_split
 from sklearn.naive_bayes import MultinomialNB
-from sklearn.preprocessing import LabelBinarizer
-from sklearn.preprocessing import LabelEncoder
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.svm import SVC
 from sklearn.tree import DecisionTreeClassifier
@@ -27,47 +28,110 @@ from sklearn.tree import DecisionTreeClassifier
 ##### Input Path
 DROPBOX_INT_PATH = '../../qss20_finalproj_rawdata/summerwork/intermediate/'
 DATA_FILE_NAME = "placeholderdata_formodeling.csv"
+H2A_DATA_FILE_NAME = "h2a_combined_2014-2021.pkl"
 DATA_FILE_PATH = os.path.join(DROPBOX_INT_PATH, DATA_FILE_NAME)
+H2A_DATA_FILE_PATH = os.path.join(DROPBOX_INT_PATH, H2A_DATA_FILE_NAME)
 # local path for now
 DATA_FILE_PATH2 = "/Users/Firstclass/Dropbox (Dartmouth College)/qss20_finalproj_rawdata/summerwork/intermediate/placeholderdata_formodeling.csv"
+H2A_DATA_FILE_PATH2 = "/Users/Firstclass/Dropbox (Dartmouth College)/qss20_finalproj_rawdata/summerwork/intermediate/h2a_combined_2014-2021.pkl"
+
+
+#### functions
+def extract_year_month(df, col):
+
+    ## convert col into datetime
+    df[col] = pd.to_datetime(df[col])
+
+    ## extract year and month into seperate columns
+    df[col+'_YEAR'] = df[col].dt.year
+    df[col+'_MONTH'] = df[col].dt.month
+    # df[col + '_YEAR_MONTH'] = df[col].dt.to_period('M')
+
+def gen_topk_dummies(df, feature, percentThreshold):
+
+    ## get count of addresses in each level of factor
+    ## recoding na to missing before counts
+    df[feature] = np.where(df[feature].isnull(), "missing", df[feature])
+    count_feat = pd.value_counts(df[feature])
+
+    ## calculate threshold
+    sum = df["jobs_group_id"].nunique()
+    threshold = int(sum * percentThreshold)
+
+    ##get an indicator for whether the category is above threshold of count of addresses
+    categories_abovethreshold = count_feat[count_feat >= threshold].index
+    categories_abovethres_logic = df[feature].isin(categories_abovethreshold)
+
+    ## copy data, create category for missing and other
+    df_dummies = df.copy()
+    df_dummies[feature][~categories_abovethres_logic] = 'OTHER'
+
+    #dummy_df = pd.get_dummies(df_dummies[feature], prefix=df_dummies[feature].name)
+    #return(dummy_df, categories_abovethreshold)
+    print(f"{feature}'s val count was "+ str(df[feature].nunique()) + ", count now:" + str(df_dummies[feature].nunique()))
+    return(df_dummies)
+
+# prepare input data with OneHotEncoder
+def prepare_inputs(X_train, X_test):
+    oe = OneHotEncoder(handle_unknown='ignore')
+    oe.fit(X_train)
+    X_train_enc = oe.transform(X_train)
+    X_test_enc = oe.transform(X_test)
+    return X_train_enc, X_test_enc
 
 
 #### Read in and investigate data
 pre_df = pd.read_csv(DATA_FILE_PATH2)
 pre_df = pre_df.reset_index().copy()
-#print(pre_df.columns.values)
 
-## convert the dates to datetime objects
-for col in ['REQUESTED_END_DATE_OF_NEED', 'JOB_END_DATE',
-            'JOB_START_DATE', 'REQUESTED_START_DATE_OF_NEED',
-            'DECISION_DATE']:
-    pre_df[col] = pd.to_datetime(pre_df[col])
+# read in h2a jobs data for filtering job feature using h2a df's column names
+with open(H2A_DATA_FILE_PATH2, "rb") as df:
+  h2a_data = pickle.load(df)
+job_feature = h2a_data.columns.tolist()
+job_feature.append("jobs_group_id")
+
+#print(pre_df.columns.values)
+#print(h2a_data.columns.values)
 
 ## Assign outcome boolean vars to y (value we are trying to predict)
-df_y = pre_df.select_dtypes(bool)
-print("Outcome variables to predict are:" + str(df_y.columns.values))
-y1 = list(df_y.iloc[:, 0])
-y2 = list(df_y.iloc[:, 1])
-# remove the them from the preMatrix ... because that would be too easy!
-pre_df = pre_df.select_dtypes(exclude=['bool'])
+outcomes = ['is_matched_investigations','outcome_is_investigation_overlapsd']
+print("Outcome variables to predict are:" + str(outcomes))
+y1 = list(pre_df[outcomes[0]])
+y2 = list(pre_df[outcomes[1]])
+# remove them from the preMatrix ... because that would be too easy!
+pre_df = pre_df.drop(columns=outcomes, axis=1)
 
 ## select columns w/ capital letter column names
-cols = [c for c in pre_df.columns if not str.islower(c)]
+cols = [c for c in pre_df.columns if c in job_feature]
 preMatrix = pre_df[cols]
-preMatrix = preMatrix.drop(columns=['Registration Act'])
+
+## convert the dates to datetime objects and pull out year, month, year_month
+for col in ['JOB_END_DATE','JOB_START_DATE']:
+    extract_year_month(preMatrix, col)
 
 print(preMatrix.shape)
-#print(preMatrix.info(verbose=True, show_counts=True))
 print(preMatrix.nunique(axis=0))
+#print(preMatrix.info(verbose=True, show_counts=True))
 
-#### seperate num/cat columns
+## change some row values to others according to value count of the column
+# what columns we want to change?
+preMatrix = gen_topk_dummies(preMatrix,"ATTORNEY_AGENT_NAME",0.01)
+
+# do a train test split
+# split into train and test sets (80/20)
+
+# split on job group id: 'jobs_group_id'
+# X_train, X_test, y_train, y_test = train_test_split(imputed_cat_feature_pre, y, test_size=0.20, random_state=1)
+X_train, X_test, y_train, y_test = train_test_split(preMatrix, y1, test_size=0.20, random_state=3)
+
+#### data imputation
+## seperate num/cat columns
 numeric_options = ["int64", "float64", "datetime64[ns]"]
 num_cols = [one for one in preMatrix.columns if preMatrix.dtypes[one] in numeric_options] # all nums are actually dates
 cat_cols = [one for one in preMatrix.columns if preMatrix.dtypes[one] not in numeric_options]
 #date_cols = [one for one in preMatrix.columns if preMatrix.dtypes[one] == "datetime64[ns]"]
 
 ## select cat columns with less than 1000 unique values
-selected_cat_small = [c for c in cat_cols if preMatrix[c].nunique()<=60]
 # choosing columns w/ nrow/2 unique values
 selected_cat_large = [c for c in cat_cols if preMatrix[c].nunique()<=1000]
 
@@ -95,6 +159,7 @@ imputed_cat_feature_pre.columns = cat_feature_pre.columns
 #imputed_num_feature_pre.columns = num_feature_pre.columns
 imputed_num_feature_pre = num_feature_pre.copy()
 print(num_feature_pre.isnull().sum())
+
 for col in num_cols:
     imputed_num_feature_pre[col].replace(pd.NaT, imputed_num_feature_pre[col].mode().iloc[0])
     #a = (imputed_num_feature_pre[col].mode())
@@ -105,26 +170,12 @@ print(imputed_cat_feature_pre.shape)
 print(imputed_num_feature_pre.shape)
 print(imputed_num_feature_pre.isnull().sum())
 
-# prepare input data with OneHotEncoder
-def prepare_inputs(X_train, X_test):
-    oe = OneHotEncoder(handle_unknown='ignore')
-    oe.fit(X_train)
-    X_train_enc = oe.transform(X_train)
-    X_test_enc = oe.transform(X_test)
-    return X_train_enc, X_test_enc
-
 imputed_combined = pd.merge(imputed_cat_feature_pre.reset_index(),
                             imputed_num_feature_pre.reset_index(), how='left',
                             on='index')
 print('%s rows lost in merge' %(imputed_num_feature_pre.shape[0]-imputed_combined.shape[0]))
 print(imputed_combined.shape)
 imputed_combined = imputed_combined.drop(columns = 'index')
-
-# do a train test split
-# split into train and test sets (80/20)
-
-# X_train, X_test, y_train, y_test = train_test_split(imputed_cat_feature_pre, y, test_size=0.20, random_state=1)
-X_train, X_test, y_train, y_test = train_test_split(imputed_combined, y1, test_size=0.20, random_state=3)
 
 # apply the oneHotEncoder within prepare_inputs
 X_train, X_test = prepare_inputs(X_train, X_test)
