@@ -267,15 +267,32 @@ sprintf("Out of %s unique case numbers, there are %s missing all opponents", len
                         nrow(trla_merge_all %>% dplyr::select(case_number, derived_allopp_miss) %>% distinct() %>% filter(derived_allopp_miss)))
 ```
 
-**rj note**: assume we should write longform data with all rows of the same case number retained. but not sure if we should group by case number and fill some of the missing fields with other values for that group (or group by both case_number and opponent)
+**rj note**: assume we should write longform data with all rows of the same case number retained. but not sure if we should group by case number and fill some of the missing fields with other values for that group (or group by both case_number and opponent)?
 
 Write to csv/dropbox
 ```{r}
 
-```
+table(trla_merge_all$derived_opponent_state[!trla_merge_all$derived_allopp_miss]) # states look relatively clean for ones not missing
 
-#TO DO
-- 84 residual filtered out on line 196- ones where n states != n_opponents
-- Deal with incorrect data /  missing states when city is filled in
-- See 174-178
+## write to dropbox ones with non-missing opponents
+trla_merge_nonmiss = trla_merge_all %>% filter(!derived_allopp_miss & !derived_allstate_miss) %>%
+        mutate(derived_legalproblemcode = ifelse(is.na(legal_problem_code_orig), legal_problem_code_more, legal_problem_code_orig),
+               derived_intakedate = case_when(is.na(intake_date_orig) ~ as.Date(intake_date_more),
+                                              !is.na(intake_date_orig) ~ as.Date(intake_date_orig),
+                                              TRUE ~ NA_Date_),
+               derived_casedispo = case_when(case_disposition_orig == "Closed" | 
+                                            case_disposition_more == "CLO" ~ "Closed",
+                                            case_disposition_orig == "Pending" |
+                                            case_disposition_more == "PEN" ~ "Pending",
+                                            case_disposition_orig == "Open" | 
+                                            case_disposition_more == "ACC" ~ "Open/accepted",
+                                            TRUE ~ "Unknown dispo")) %>% 
+        filter(!derived_is_notemp) %>% # filter out the institutional opponents discussed earlier
+        dplyr::select(caseidlead_case_number, case_number, derived_intakedate, derived_casedispo, derived_opponent_consolidated,
+               derived_opponent_state, derived_opponent_city, derived_legalproblemcode) 
+
+
+saveRDS(trla_merge_nonmiss, "intermediate/cleaned_TRLA_formerge.RDS") 
+
+```
 
