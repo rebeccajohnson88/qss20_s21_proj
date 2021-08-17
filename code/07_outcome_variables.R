@@ -17,8 +17,9 @@ if(RUN_FROM_CONSOLE){
   args <- commandArgs(TRUE)
   DATA_DIR = args[1]
 } else{
-  DATA_DIR = "~/Dropbox (Dartmouth College)/qss20_finalproj_rawdata/summerwork"
+  #DATA_DIR = "~/Dropbox (Dartmouth College)/qss20_finalproj_rawdata/summerwork"
   #DATA_DIR = "C:/Users/Austin Paralegal/Dropbox/qss20_finalproj_rawdata/summerwork"
+  DATA_DIR = "~/Dropbox/qss20_finalproj_rawdata/summerwork/"
 }
 
 setwd(DATA_DIR)
@@ -69,19 +70,32 @@ matched_data <- matched_data %>%
 
 
 #############################
-# Creating outcome variables
+# Creating outcome variables with WHD
 #############################
 
 matched_data <- matched_data %>%
   mutate(outcome_is_any_investigation = is_matched_investigations,
          outcome_is_investigation_aftersd = ifelse(is_matched_investigations & findings_start_date >= JOB_START_DATE, TRUE, FALSE),
          outcome_is_investigation_before_sd = ifelse(is_matched_investigations & findings_start_date < JOB_START_DATE, TRUE, FALSE),
-         outcome_is_investigation_overlapsd = ifelse(is_matched_investigations & findings_start_date >= JOB_START_DATE & findings_start_date <= JOB_END_DATE, TRUE, FALSE))
+         outcome_is_investigation_overlapsd = ifelse(is_matched_investigations & findings_start_date >= JOB_START_DATE & findings_start_date <= JOB_END_DATE, TRUE, FALSE),
+         outcome_is_any_viol = is_matched_investigations & h2a_violtn_cnt > 0,
+         outcome_is_viol_aftersd = ifelse(is_matched_investigations & findings_start_date >= JOB_START_DATE & h2a_violtn_cnt > 0, TRUE, FALSE),
+         outcome_is_viol_before_sd = ifelse(is_matched_investigations & findings_start_date < JOB_START_DATE & h2a_violtn_cnt > 0, TRUE, FALSE),
+         outcome_is_viol_overlapsd = ifelse(is_matched_investigations & findings_start_date >= JOB_START_DATE & findings_start_date <= JOB_END_DATE & h2a_violtn_cnt > 0, TRUE, FALSE))
 
-table(matched_data$outcome_is_any_investigation)
-table(matched_data$outcome_is_investigation_aftersd)
-table(matched_data$outcome_is_investigation_before_sd)
-table(matched_data$outcome_is_investigation_overlapsd)
 
-saveRDS(final_df, "intermediate/final_with_outcomes.RDS")
-write.csv(final_df, "intermediate/final_with_outcomes.csv")
+
+
+
+#############################
+# LAter create outcome variables with TRLA
+#############################
+
+saveRDS(matched_data, "clean/jobs_formod.RDS")
+write.csv(matched_data, "clean/jobs_formod.csv", row.names = FALSE) 
+
+## save version with col classes
+matched_data_colclass = data.frame(vars = colnames(matched_data),
+                                   class = sapply(matched_data, function(x) class(x)))
+
+
