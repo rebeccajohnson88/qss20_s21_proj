@@ -130,7 +130,6 @@ sprintf("After filtering to approved only and non-missing names, we go from %s r
         nrow(h2a),
         nrow(approved_only))
 
-#??? Include rejected TRLA cases?
 
 # make new "name" columns for the cleaned versions of the names
 emp_name_app = unlist(lapply(approved_only$EMPLOYER_NAME, clean_names))
@@ -241,9 +240,7 @@ approved_deduped_formatch <- approved_deduped_clean %>%
 stopifnot(length(unique(approved_deduped_formatch$jobs_group_id)) == nrow(approved_deduped_formatch))
 
 
-#Skip deduping for TRLA data? Or do we want to dedupe based on name, intake date, and case number?
-
-#dedupe_fields = c("name", "derived_intakedate", "case_number", "derived_opponent_state")
+#Skip deduping for TRLA data?
 
 dedupe_fields = c("name", "derived_opponent_state")
 
@@ -308,7 +305,7 @@ fuzzy_matching <- function(state, jobs_df, trla_investigations_df){
                                        string_threshold = .85)
   
   merging <- merge_matches(jobs_formerge = approved_deduped_temp,
-                           trla_investigations_formerge = trla_investigations_deduped_temp,
+                           trla_formerge = trla_investigations_deduped_temp,
                            match_object = matches.out)
   
   saveRDS(merging, sprintf("intermediate/trla_fuzzy_matching_%s.RDS", state))
@@ -329,7 +326,7 @@ if(RUN_FULL_MATCH){
   print("starting match")
   all_states_post_fuzzy <- lapply(all_states_keep, fuzzy_matching,
                                   jobs_df = approved_deduped_formatch,
-                                  investigations_df = trla_investigations_deduped_formatch)
+                                  trla_investigations_df = trla_investigations_deduped_formatch)
   
   ## read in results
   all_states_post_fuzzy <- lapply(grep("trla\\_fuzzy\\_matching\\_[A-Z][A-Z].RDS", 
@@ -344,13 +341,15 @@ if(RUN_FULL_MATCH){
   all_states_final_df = readRDS("intermediate/trla_fuzzy_matching_final.RDS") %>% select(-index)
 }
 
+### !! STUCK HERE !! ###
 
+#ERROR: cannot coerce class 'c("fastLink", "matchesLink")' to a data.frame
+#Warnings: In gammaCKpar(dfA[, varnames[i]], dfB[, varnames[i]],  ... :
+#There are no partial matches. We suggest either changing the value of cut.p or using gammaCK2par() instead
 
 #################
 # Add duplicates back in: trla investigations
 #################
-
-#ES Note: This is where you've lost me.
 
 ## first,  add additional investigations on using the trla_investigations_group_id
 ## these are: (1) trla_investigations filtered out in dedup, (2) in relevant states, and 
