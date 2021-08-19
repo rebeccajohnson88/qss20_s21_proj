@@ -21,7 +21,8 @@ if(RUN_FROM_CONSOLE){
   args <- commandArgs(TRUE)
   DATA_DIR = args[1]
 } else{
-  DATA_DIR = "~/Dropbox (Dartmouth College)/qss20_finalproj_rawdata/summerwork"
+  DATA_DIR = "C:/Users/Austin Paralegal/Dropbox/qss20_finalproj_rawdata/summerwork"
+  #DATA_DIR = "~/Dropbox (Dartmouth College)/qss20_finalproj_rawdata/summerwork"
 }
 
 
@@ -134,9 +135,9 @@ sprintf("After filtering to approved only and non-missing names, we go from %s r
 
 # filtering to just h2a violations
 investigations_filtered <- investigations %>%
-  filter(`Registration Act` == "H2A" | h2a_violtn_cnt > 0)
+  filter(`Registration Act` == "H2A" | `Registration Act` == "FLSA" | `Registration Act` == "MSPA")
 
-sprintf("After filtering to H2A investigations only, we go from %s rows to %s rows",
+sprintf("After filtering to H2A, FLSA, and MSPA investigations only, we go from %s rows to %s rows",
         nrow(investigations),
         nrow(investigations_filtered))
 
