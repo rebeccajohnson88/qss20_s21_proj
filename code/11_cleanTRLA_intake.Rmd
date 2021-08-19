@@ -18,9 +18,6 @@ library(readxl)
 library(here)
 library(lubridate)
 
-#My path
-user = "C:/Users/Austin Paralegal"
-
 
 ## Path to data
 RUN_FROM_CONSOLE = FALSE
@@ -28,7 +25,8 @@ if(RUN_FROM_CONSOLE){
   args <- commandArgs(TRUE)
   DATA_DIR = args[1]
 } else{
-  DATA_DIR = paste0("~/Dropbox/qss20_finalproj_rawdata/summerwork")
+  DATA_DIR = "C:/Users/Austin Paralegal/Dropbox/qss20_finalproj_rawdata/summerwork"
+  #DATA_DIR = "~/Dropbox/qss20_finalproj_rawdata/summerwork"
 }
 ```
 
@@ -200,10 +198,6 @@ trla_more_longform = trla_more %>% mutate(derived_opponent_consolidated = strspl
 ```{r}
 #Follow proposed logic to join the datasets
 
-#Additional logic -- case number matches, present in orig & present in more, but diff AP
-#really not sure how to do this without a clear separator for the trla_more opponent data
-#just eyeballing it, does not seem like a major issue
-
 #filter dataset with only unique trla_more rows
 trla_more_notinorig <- trla_more_longform %>%
   anti_join(trla_orig2, by = c("case_number")) %>%
@@ -280,19 +274,20 @@ trla_merge_nonmiss = trla_merge_all %>% filter(!derived_allopp_miss & !derived_a
                derived_intakedate = case_when(is.na(intake_date_orig) ~ as.Date(intake_date_more),
                                               !is.na(intake_date_orig) ~ as.Date(intake_date_orig),
                                               TRUE ~ NA_Date_),
-               derived_casedispo = case_when(case_disposition_orig == "Closed" | 
-                                            case_disposition_more == "CLO" ~ "Closed",
-                                            case_disposition_orig == "Pending" |
-                                            case_disposition_more == "PEN" ~ "Pending",
-                                            case_disposition_orig == "Open" | 
-                                            case_disposition_more == "ACC" ~ "Open/accepted",
-                                            TRUE ~ "Unknown dispo")) %>% 
+               derived_casedispo = case_when(!is.na(case_disposition_orig) ~ case_disposition_orig,
+                                             case_disposition_more == "CLO" ~ "Closed",
+                                             case_disposition_more == "PEN" ~ "Pending",
+                                             case_disposition_more == "ACC" ~ "Open",
+                                             TRUE ~ "Unknown dispo"
+                                             )) %>%
         filter(!derived_is_notemp) %>% # filter out the institutional opponents discussed earlier
         dplyr::select(caseidlead_case_number, case_number, derived_intakedate, derived_casedispo, derived_opponent_consolidated,
                derived_opponent_state, derived_opponent_city, derived_legalproblemcode) 
 
 
-saveRDS(trla_merge_nonmiss, "intermediate/cleaned_TRLA_formerge.RDS") 
+
+saveRDS(trla_merge_nonmiss, "intermediate/cleaned_TRLA_formerge.RDS")
+write.csv(trla_merge_nonmiss, "intermediate/cleaned_TRLA_formerge.csv")
 
 ```
 
