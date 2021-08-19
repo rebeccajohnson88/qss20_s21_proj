@@ -109,6 +109,12 @@ merge_matches <- function(jobs_formerge, investigations_formerge, match_object){
 # load in h2a data
 h2a <- read.csv("intermediate/h2a_combined_2014-2021.csv")
 
+# get a list of applicable NAICS codes
+h2a_NAICS <- read.csv("intermediate/h2a_combined_2014-2021_preserveallcols.csv") %>%
+  mutate(as.character(NAICS_CODE)) %>%
+  group_by(NAICS_CODE) %>%
+  summarise(n())
+
 # load in investigations/violations data
 investigations <- fread("raw/enforcement_registration20210720.csv")
 
@@ -132,12 +138,12 @@ sprintf("After filtering to approved only and non-missing names, we go from %s r
         nrow(h2a),
         nrow(approved_only))
 
-
-# filtering to just h2a violations
+# filtering to H2a, FLSA, MSPA with a NAICS code applicable to agriculture or H2A program
 investigations_filtered <- investigations %>%
-  filter(`Registration Act` == "H2A" | `Registration Act` == "FLSA" | `Registration Act` == "MSPA")
+  filter((`Registration Act` == "H2A" | `Registration Act` == "FLSA" | `Registration Act` == "MSPA") & 
+           (str_detect(naic_cd, "^11") | naic_cd %in% h2a_NAICS$NAICS_CODE))
 
-sprintf("After filtering to H2A, FLSA, and MSPA investigations only, we go from %s rows to %s rows",
+sprintf("After filtering to H2A, FLSA, and MSPA investigations with applicable NAICS codes only, we go from %s rows to %s rows",
         nrow(investigations),
         nrow(investigations_filtered))
 
@@ -161,6 +167,9 @@ investigations_filtered <- investigations_filtered %>%
 ################
 # De-duping
 ###############
+
+
+#NOTE from ES: running into vector allocation issues here and can't continue
 
 # job postings data
 dedupe_fields = c("name")
@@ -233,7 +242,7 @@ saveRDS(approved_deduped_clean, "intermediate/approved_only_pre_deduping.RDS")
 set.seed(1)
 
 ## within the full dataset, within each group of same
-## employers, first filter to earliest decision date
+## employers, first filter to earliest date
 ## and then in the case of ties sample 1
 approved_deduped_formatch <- approved_deduped_clean %>%
   group_by(jobs_group_id) %>%
@@ -253,6 +262,7 @@ if(RUN_DEDUPE_I){
                                      dfB = investigations_filtered,
                                      varnames = dedupe_fields,
                                      stringdist.match = dedupe_fields,
+                                     #threshold.match = .75,
                                      dedupe.matches = FALSE)
   
   investigations_deduped = getMatches(dfA = investigations_filtered,
