@@ -28,6 +28,7 @@ if(RUN_FROM_CONSOLE){
   DATA_DIR = "C:/Users/Austin Paralegal/Dropbox/qss20_finalproj_rawdata/summerwork"
   #DATA_DIR = "~/Dropbox/qss20_finalproj_rawdata/summerwork"
 }
+
 ```
 
 Load data
@@ -284,10 +285,16 @@ trla_merge_nonmiss = trla_merge_all %>% filter(!derived_allopp_miss & !derived_a
         dplyr::select(caseidlead_case_number, case_number, derived_intakedate, derived_casedispo, derived_opponent_consolidated,
                derived_opponent_state, derived_opponent_city, derived_legalproblemcode) 
 
+trla_merge_nonmiss <- trla_merge_nonmiss %>%
+  distinct(case_number, derived_opponent_consolidated, derived_opponent_state, derived_intakedate, .keep_all = TRUE)
 
 
-saveRDS(trla_merge_nonmiss, "intermediate/cleaned_TRLA_formerge.RDS")
-write.csv(trla_merge_nonmiss, "intermediate/cleaned_TRLA_formerge.csv")
+saveRDS(trla_merge_nonmiss, paste0(DATA_DIR, "intermediate/cleaned_TRLA_formerge.RDS"))
+write.csv(trla_merge_nonmiss, paste0(DATA_DIR, "intermediate/cleaned_TRLA_formerge.csv"))
+
+
+saveRDS(trla_merge_nonmiss, "cleaned_TRLA_formerge.RDS")
+write.csv(trla_merge_nonmiss, "cleaned_TRLA_formerge.csv")
 
 ```
 
