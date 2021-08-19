@@ -1,9 +1,7 @@
 ##########################
-# This code fuzzy matches between H2A applications data and the WHD investigations data
-# Author: Cam Guage 
-# Written: 6/29/2021
-##########################
-# 11:26
+# This code fuzzy matches between H2A applications data and the TRLA data
+# Author: Lizzie Shackney 
+# Written: 8/19/2021
 ##########################
 # Packages and Imports
 ##########################
