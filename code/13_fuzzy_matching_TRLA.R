@@ -85,14 +85,14 @@ generate_save_matches <- function(dbase1, dbase2, matchVars, string_threshold){
 }
 
 ## function to merge matched objects with each other
-merge_matches <- function(jobs_formerge, investigations_formerge, match_object){
+merge_matches <- function(jobs_formerge, trla_formerge, match_object){
   
   merged_data = merge(jobs_formerge, 
                       match_object$matches,
                       by.x = "index",
                       by.y = "inds.a",
                       all.x = TRUE) %>%
-    left_join(investigations_formerge, by = c("inds.b" = "index"),
+    left_join(trla_formerge, by = c("inds.b" = "index"),
               suffix = c("_jobs", "_investigations")) %>%
     mutate(is_matched_investigations = case_when(!is.na(name_investigations) ~ TRUE, 
                                                  TRUE ~ FALSE)) # create logical flag for whether it matched to investigations
@@ -107,14 +107,8 @@ merge_matches <- function(jobs_formerge, investigations_formerge, match_object){
 # load in h2a data
 h2a <- read.csv("intermediate/h2a_combined_2014-2021.csv")
 
-# get a list of applicable NAICS codes
-h2a_NAICS <- read.csv("intermediate/h2a_combined_2014-2021_preserveallcols.csv") %>%
-  mutate(as.character(NAICS_CODE)) %>%
-  group_by(NAICS_CODE) %>%
-  summarise(n())
-
 # load in investigations/violations data
-investigations <- fread("raw/enforcement_registration20210720.csv")
+trla_cases <- read.csv("intermediate/cleaned_TRLA_formerge.csv")
 
 
 ################
@@ -136,106 +130,102 @@ sprintf("After filtering to approved only and non-missing names, we go from %s r
         nrow(h2a),
         nrow(approved_only))
 
-# filtering to H2a, FLSA, MSPA with a NAICS code applicable to agriculture or H2A program
-investigations_filtered <- investigations %>%
-  filter((`Registration Act` == "H2A" | `Registration Act` == "FLSA" | `Registration Act` == "MSPA") & 
-           (str_detect(naic_cd, "^11") | naic_cd %in% h2a_NAICS$NAICS_CODE))
-
-sprintf("After filtering to H2A, FLSA, and MSPA investigations with applicable NAICS codes only, we go from %s rows to %s rows",
-        nrow(investigations),
-        nrow(investigations_filtered))
-
+#??? Include rejected TRLA cases?
 
 # make new "name" columns for the cleaned versions of the names
 emp_name_app = unlist(lapply(approved_only$EMPLOYER_NAME, clean_names))
 approved_only$name <- emp_name_app  
 
-emp_name_i =  unlist(lapply(investigations_filtered$legal_name, clean_names))
-investigations_filtered$name <- emp_name_i 
+emp_name_trla =  unlist(lapply(trla_cases$derived_opponent_consolidated, clean_names))
+trla_cases$name <- emp_name_trla 
 
+#further cleaning could address DBA issue
 
 # Clean up the city names
 approved_only <- approved_only %>%
   mutate(city = toupper(EMPLOYER_CITY))
 
-investigations_filtered <- investigations_filtered %>%
-  mutate(city = toupper(cty_nm))
+trla_cases <- trla_cases %>%
+  mutate(city = toupper(derived_opponent_city))
 
 
 ################
 # De-duping
 ###############
 
-
-#NOTE from ES: running into vector allocation issues here and can't continue
-
 # job postings data
 dedupe_fields = c("name")
-RUN_DEDUPE_JOBS = TRUE
-if(RUN_DEDUPE_JOBS){
-  
-  approved_matches <- fastLink(dfA = approved_only,
-                               dfB = approved_only,
-                               varnames = dedupe_fields,
-                               stringdist.match = dedupe_fields,
-                               dedupe.matches = FALSE)
-  saveRDS(approved_matches, "intermediate/jobs_dedupe.RDS")
-  
-} else{
-  approved_matches = readRDS("intermediate/jobs_dedupe.RDS")
-}
 
-approved_deduped = getMatches(dfA = approved_only,
-                              dfB = approved_only,
-                              fl.out = approved_matches)
 
-sprintf("After deduplicating job clearance data, we go from %s unique employers to %s unique",
-        length(unique(approved_deduped$CASE_NUMBER)),
-        length(unique(approved_deduped$dedupe.ids)))
+# RUN_DEDUPE_JOBS = TRUE
+# if(RUN_DEDUPE_JOBS){
+#   
+#   approved_matches <- fastLink(dfA = approved_only,
+#                                dfB = approved_only,
+#                                varnames = dedupe_fields,
+#                                stringdist.match = dedupe_fields,
+#                                dedupe.matches = FALSE)
+#   saveRDS(approved_matches, "intermediate/jobs_dedupe.RDS")
+#   
+# } else{
+#   approved_matches = readRDS("intermediate/jobs_dedupe.RDS")
+# }
+# 
+# approved_deduped = getMatches(dfA = approved_only,
+#                               dfB = approved_only,
+#                               fl.out = approved_matches)
+# 
+# sprintf("After deduplicating job clearance data, we go from %s unique employers to %s unique",
+#         length(unique(approved_deduped$CASE_NUMBER)),
+#         length(unique(approved_deduped$dedupe.ids)))
+# 
+# ## construct two ids: (1) row_id (previously merging_index) and (2) rename dedupe_id to something more descriptive
+# approved_deduped_clean = approved_deduped %>%
+#   mutate(jobs_row_id = 1:nrow(approved_deduped)) %>%
+#   rename(jobs_group_id = dedupe.ids)
+# 
+# # adjust jobs_group_id, as it has some jobs that occurred in different states in the same group
+# # first see if any jobs groups contain more than one state
+# test <- approved_deduped_clean %>%
+#   group_by(jobs_group_id) %>%
+#   mutate(is_same_state = ifelse(length(unique(state_formatch)) == 1, TRUE, FALSE)) %>%
+#   ungroup()
+# 
+# table(test$is_same_state) # looks like we have some jobs that span multiple states
+# 
+# # Thus, adjust the jobs_group_id so that each combination of jobs_group_id and state maps to a unique index
+# # First create a part 2 of the index that will correspond to the state within a particular jobss_group_id
+# approved_deduped_clean <- approved_deduped_clean %>%
+#   group_by(jobs_group_id) %>%
+#   mutate(jobs_group_id_part2 = as.integer(factor(state_formatch))) %>%
+#   ungroup() %>%
+#   rename(jobs_group_id_part1 = jobs_group_id)
+# 
+# # Then concatenate this part2 index with the original index to create a new and more accurate index
+# approved_deduped_clean$jobs_group_id <- str_c(approved_deduped_clean$jobs_group_id_part1, approved_deduped_clean$jobs_group_id_part2, sep = "_")
+# 
+# # confirm that is_same_state is all TRUE now
+# test <- approved_deduped_clean %>%
+#   group_by(jobs_group_id) %>%
+#   mutate(is_same_state = ifelse(length(unique(state_formatch)) == 1, TRUE, FALSE)) %>%
+#   ungroup()
+# 
+# table(test$is_same_state) # all are TRUE,this was successful
+# 
+# # also confirm that investigations matched during de-deduping and in the same state have the same id
+# test <- approved_deduped_clean %>%
+#   group_by(jobs_group_id_part1, state_formatch) %>%
+#   mutate(is_same_id = ifelse(length(unique(jobs_group_id)) == 1, TRUE, FALSE)) %>%
+#   ungroup()
+# 
+# table(test$is_same_id) # all are TRUE,this was successful
+# 
+# # save before we filter out duplicates pre match
+# saveRDS(approved_deduped_clean, "intermediate/approved_only_pre_deduping.RDS")
 
-## construct two ids: (1) row_id (previously merging_index) and (2) rename dedupe_id to something more descriptive
-approved_deduped_clean = approved_deduped %>%
-  mutate(jobs_row_id = 1:nrow(approved_deduped)) %>%
-  rename(jobs_group_id = dedupe.ids)
 
-# adjust jobs_group_id, as it has some jobs that occurred in different states in the same group
-# first see if any jobs groups contain more than one state
-test <- approved_deduped_clean %>%
-  group_by(jobs_group_id) %>%
-  mutate(is_same_state = ifelse(length(unique(state_formatch)) == 1, TRUE, FALSE)) %>%
-  ungroup()
-
-table(test$is_same_state) # looks like we have some jobs that span multiple states
-
-# Thus, adjust the jobs_group_id so that each combination of jobs_group_id and state maps to a unique index
-# First create a part 2 of the index that will correspond to the state within a particular jobss_group_id
-approved_deduped_clean <- approved_deduped_clean %>%
-  group_by(jobs_group_id) %>%
-  mutate(jobs_group_id_part2 = as.integer(factor(state_formatch))) %>%
-  ungroup() %>%
-  rename(jobs_group_id_part1 = jobs_group_id)
-
-# Then concatenate this part2 index with the original index to create a new and more accurate index
-approved_deduped_clean$jobs_group_id <- str_c(approved_deduped_clean$jobs_group_id_part1, approved_deduped_clean$jobs_group_id_part2, sep = "_")
-
-# confirm that is_same_state is all TRUE now
-test <- approved_deduped_clean %>%
-  group_by(jobs_group_id) %>%
-  mutate(is_same_state = ifelse(length(unique(state_formatch)) == 1, TRUE, FALSE)) %>%
-  ungroup()
-
-table(test$is_same_state) # all are TRUE,this was successful
-
-# also confirm that investigations matched during de-deduping and in the same state have the same id
-test <- approved_deduped_clean %>%
-  group_by(jobs_group_id_part1, state_formatch) %>%
-  mutate(is_same_id = ifelse(length(unique(jobs_group_id)) == 1, TRUE, FALSE)) %>%
-  ungroup()
-
-table(test$is_same_id) # all are TRUE,this was successful
-
-# save before we filter out duplicates pre match
-saveRDS(approved_deduped_clean, "intermediate/approved_only_pre_deduping.RDS")
+#Reading in and skipping the above
+approved_deduped_clean = readRDS("intermediate/approved_only_pre_deduping.RDS")
 
 set.seed(1)
 
@@ -251,89 +241,51 @@ approved_deduped_formatch <- approved_deduped_clean %>%
 stopifnot(length(unique(approved_deduped_formatch$jobs_group_id)) == nrow(approved_deduped_formatch))
 
 
-# deduping of investigations
+#Skip deduping for TRLA data? Or do we want to dedupe based on name, intake date, and case number?
+
+#dedupe_fields = c("name", "derived_intakedate", "case_number", "derived_opponent_state")
+
+dedupe_fields = c("name", "derived_opponent_state")
 
 RUN_DEDUPE_I = TRUE
 if(RUN_DEDUPE_I){
-  
-  investigations_matches <- fastLink(dfA = investigations_filtered,
-                                     dfB = investigations_filtered,
-                                     varnames = dedupe_fields,
-                                     stringdist.match = dedupe_fields,
-                                     #threshold.match = .75,
-                                     dedupe.matches = FALSE)
-  
-  investigations_deduped = getMatches(dfA = investigations_filtered,
-                                      dfB = investigations_filtered,
-                                      fl.out = investigations_matches)
-  saveRDS(investigations_deduped, "intermediate/investigations_dedupe.RDS") 
-  
-} else{
-  investigations_deduped = readRDS("intermediate/investigations_dedupe.RDS") 
-}
 
-sprintf("After deduplicating the filtered investigations data, we go from %s unique employers to %s unique",
-        length(unique(investigations_deduped$case_id)),
-        length(unique(investigations_deduped$dedupe.ids)))
+  trla_deduped = getMatches(dfA = trla_cases,
+                                      dfB = trla_cases,
+                                      fl.out = fastLink(dfA = trla_cases,
+                                                        dfB = trla_cases,
+                                                        varnames = dedupe_fields,
+                                                        stringdist.match = dedupe_fields,
+                                                        dedupe.matches = FALSE))
+  
+  saveRDS(trla_deduped, "intermediate/trla_dedupe.RDS")
+
+} else{
+  investigations_deduped = readRDS("intermediate/trla_dedupe.RDS")
+}
 
 ## similarly, create a row id and group id
 ## construct two ids: (1) row_id (previously merging_index) and (2) rename dedupe_id to something more descriptive
-investigations_deduped_clean = investigations_deduped %>%
-  mutate(investigations_row_id = 1:nrow(investigations_deduped)) %>%
-  rename(investigations_group_id = dedupe.ids)
-
-# adjust investigations_group_id, as it has some investigations that occurred in different states in the same group
-# see if any investigations groups contain more than one state
-test <- investigations_deduped_clean %>%
-  group_by(investigations_group_id) %>%
-  mutate(is_same_state = ifelse(length(unique(st_cd)) == 1, TRUE, FALSE)) %>%
-  ungroup()
-
-table(test$is_same_state) # looks like we have some investigations that span multiple states
-
-# Thus, adjust the investigations_group_id so that each combination of investigations_group_id and state maps to a unique index
-# First create a part 2 of the index that will correspond to the state within a particular investigations_group_id
-investigations_deduped_clean <- investigations_deduped_clean %>%
-  group_by(investigations_group_id) %>%
-  mutate(investigations_group_id_part2 = as.integer(factor(st_cd))) %>%
-  ungroup() %>%
-  rename(investigations_group_id_part1 = investigations_group_id)
-
-# Then concatenate this part2 index with the original index to create a new and more accurate index
-investigations_deduped_clean$investigations_group_id <- str_c(investigations_deduped_clean$investigations_group_id_part1, investigations_deduped_clean$investigations_group_id_part2, sep = "_")
-
-# confirm that this worked successfully
-test <- investigations_deduped_clean %>%
-  group_by(investigations_group_id) %>%
-  mutate(is_same_state = ifelse(length(unique(st_cd)) == 1, TRUE, FALSE)) %>%
-  ungroup()
-
-table(test$is_same_state) # all are TRUE,this was successful
-
-# also confirm that investigations matched during de-deduping and in the same state have the same id
-test <- investigations_deduped_clean %>%
-  group_by(investigations_group_id_part1, st_cd) %>%
-  mutate(is_same_id = ifelse(length(unique(investigations_group_id)) == 1, TRUE, FALSE)) %>%
-  ungroup()
-
-table(test$is_same_id) # all are TRUE,this was successful
+trla_cases_clean = trla_deduped %>%
+  mutate(trla_investigations_row_id = 1:nrow(trla_cases)) %>%
+  rename(trla_investigations_group_id = dedupe.ids)
 
 # save before we filter out duplicates
-saveRDS(investigations_deduped_clean, "intermediate/investigations_filtered_pre_deduping.RDS")
+saveRDS(trla_cases_clean, "intermediate/trla_investigations_filtered_pre_deduping.RDS")
 
-investigations_deduped_formatch <- investigations_deduped_clean %>%
-  group_by(investigations_group_id) %>%
-  filter(findings_end_date == min(findings_end_date)) %>%
+trla_investigations_deduped_formatch <- trla_cases_clean %>%
+  group_by(trla_investigations_group_id) %>%
   sample_n(1)
 
-stopifnot(length(unique(investigations_deduped_formatch$investigations_group_id)) == 
-            nrow(investigations_deduped_formatch))
+stopifnot(length(unique(trla_investigations_deduped_formatch$trla_investigations_group_id)) == 
+            nrow(trla_investigations_deduped_formatch))
 
 
 #################
 # Driver Function for Fuzzy Matching
 #################
-fuzzy_matching <- function(state, jobs_df, investigations_df){
+
+fuzzy_matching <- function(state, jobs_df, trla_investigations_df){
   
   print(sprintf("Working on %s", state))
   
@@ -341,25 +293,25 @@ fuzzy_matching <- function(state, jobs_df, investigations_df){
   approved_deduped_temp <- jobs_df %>%
     filter(state_formatch == state) 
   
-  investigations_deduped_temp <- as.data.frame(investigations_df) %>%
-    filter(st_cd == state)
+  trla_investigations_deduped_temp <- as.data.frame(trla_investigations_df) %>%
+    filter(derived_opponent_state == state)
   
   # create index variable for merging
   approved_deduped_temp$index = 1:nrow(approved_deduped_temp)
   
-  investigations_deduped_temp$index = 1:nrow(investigations_deduped_temp)
+  trla_investigations_deduped_temp$index = 1:nrow(trla_investigations_deduped_temp)
   
   # carry out the merge
   matches.out <- generate_save_matches(dbase1 = approved_deduped_temp,
-                                       dbase2 = investigations_deduped_temp,
+                                       dbase2 = trla_investigations_deduped_temp,
                                        matchVars = c("name", "city"),
                                        string_threshold = .85)
   
   merging <- merge_matches(jobs_formerge = approved_deduped_temp,
-                           investigations_formerge =investigations_deduped_temp,
+                           trla_investigations_formerge = trla_investigations_deduped_temp,
                            match_object = matches.out)
   
-  saveRDS(merging, sprintf("intermediate/fuzzy_matching_%s.RDS", state))
+  saveRDS(merging, sprintf("intermediate/trla_fuzzy_matching_%s.RDS", state))
   
   return(merging)
 }
@@ -367,10 +319,9 @@ fuzzy_matching <- function(state, jobs_df, investigations_df){
 # find all states in one of the datasets
 all_states <- unique(approved_deduped_clean$state_formatch)
 
-# make sure states are in both data sets
-all_states_both <- all_states[(all_states %in% investigations_deduped_clean$st_cd)]
+# Not all states will be in both datasets, so keep just the 
+all_states_keep <- all_states[(all_states %in% trla_cases_clean$derived_opponent_state)]
 
-all_states_keep = setdiff(all_states_both, c("PR", "AK", "RI")) # remove ones with very few jobs/no matches
 
 RUN_FULL_MATCH = TRUE
 if(RUN_FULL_MATCH){
@@ -378,45 +329,49 @@ if(RUN_FULL_MATCH){
   print("starting match")
   all_states_post_fuzzy <- lapply(all_states_keep, fuzzy_matching,
                                   jobs_df = approved_deduped_formatch,
-                                  investigations_df = investigations_deduped_formatch)
+                                  investigations_df = trla_investigations_deduped_formatch)
   
   ## read in results
-  all_states_post_fuzzy <- lapply(grep("fuzzy\\_matching\\_[A-Z][A-Z].RDS", 
+  all_states_post_fuzzy <- lapply(grep("trla\\_fuzzy\\_matching\\_[A-Z][A-Z].RDS", 
                                        list.files("intermediate/"), value = TRUE),
                                   function(x) readRDS(sprintf("intermediate/%s", x))) 
   ## rowbind results
   all_states_final_df <- do.call(rbind.data.frame, all_states_post_fuzzy)
   
   ## write
-  saveRDS(all_states_final_df, "intermediate/fuzzy_matching_final.RDS")
+  saveRDS(all_states_final_df, "intermediate/trla_fuzzy_matching_final.RDS")
 } else{
-  all_states_final_df = readRDS("intermediate/fuzzy_matching_final.RDS") %>% select(-index)
+  all_states_final_df = readRDS("intermediate/trla_fuzzy_matching_final.RDS") %>% select(-index)
 }
 
 
+
 #################
-# Add duplicates back in: investigations
+# Add duplicates back in: trla investigations
 #################
 
-## first,  add additional investigations on using the investigations_group_id
-## these are: (1) investigations filtered out in dedup, (2) in relevant states, and 
-## (3) group id is in match results, indicating that other investigations in the group matched
-investigations_toadd = investigations_deduped_clean %>% filter(!investigations_row_id %in% 
-                                                                 investigations_deduped_formatch$investigations_row_id &
-                                                                 st_cd %in% all_states_keep &
-                                                                 investigations_group_id %in% 
-                                                                 all_states_final_df$investigations_group_id[!is.na(all_states_final_df$investigations_group_id)])
+#ES Note: This is where you've lost me.
+
+## first,  add additional investigations on using the trla_investigations_group_id
+## these are: (1) trla_investigations filtered out in dedup, (2) in relevant states, and 
+## (3) group id is in match results, indicating that other trla_investigations in the group matched
+
+investigations_toadd = trla_investigations_deduped_clean %>% filter(!trla_investigations_row_id %in% 
+                                                                 trla_investigations_deduped_formatch$trla_investigations_row_id &
+                                                                 derived_opponent_state %in% all_states_keep &
+                                                                 trla_investigations_group_id %in% 
+                                                                 all_states_final_df$trla_investigations_group_id[!is.na(all_states_final_df$trla_investigations_group_id)])
 
 ## add additional matches and fill values within a group id
 investigations_toadd_wjobid = merge(investigations_toadd,
                                     all_states_final_df %>% filter(is_matched_investigations) %>% 
                                       select(jobs_row_id,
                                              jobs_group_id,
-                                             investigations_group_id),
-                                    by = "investigations_group_id",
+                                             trla_investigations_group_id),
+                                    by = "trla_investigations_group_id",
                                     all.x = TRUE) %>%
-  rename(city_investigations = city,
-         name_investigations = name)
+  rename(trla_city_investigations = city,
+         trla_name_investigations = name)
 
 
 ## add blank cols for the jobs cols before rbind
@@ -431,18 +386,19 @@ matchres_allinvest = rbind.data.frame(all_states_final_df,
 
 ## group by investigations group id and fill in values for jobs
 jobs_cols = cols_toadd
-matchres_allinvest_fill = matchres_allinvest %>% group_by(investigations_group_id) %>%
+matchres_allinvest_fill = matchres_allinvest %>% group_by(trla_investigations_group_id) %>%
   fill(jobs_cols, .direction = "downup") %>%
   ungroup() 
 
 ### check: look at values for investigation added in
-test_investigation = investigations_torbind %>% slice(1) %>% pull(investigations_group_id)
+test_investigation = investigations_torbind %>% slice(1) %>% pull(trla_investigations_group_id)
 head(investigations_toadd_wjobid %>% filter(investigations_group_id %in% test_investigation))
 View(matchres_allinvest_fill %>% filter(investigations_group_id %in% test_investigation) %>% select(contains("id")))
 
+
 #################
 # Add duplicates back in: jobs
-# above code adds investigations 
+# above code adds trla_investigations 
 # removed during deduplication/ties
 # them to relevant job
 #################
@@ -455,8 +411,6 @@ jobs_removed_whendedup = approved_deduped_clean %>% filter(!jobs_row_id %in% app
 
 ## rowbind them using NA for the new cols and fill values for those cols using the jobs_group_id so that
 ## all jobs within the same deduplicated group get same values for investigations
-
-
 
 ## pull group ids with any investigations and work on filling
 ## basically, within a group of jobs, want to (1) take values from
@@ -538,6 +492,7 @@ for (group_id in unique(job_groups_with_investigations_df$jobs_group_id))
   # update the vector
   list_of_dfs_to_rbind <- c(list_of_dfs_to_rbind, list(rbound_df))
 }
+
 # 2:21, 2:28
 
 saveRDS(list_of_dfs_to_rbind, "intermediate/list_of_dfs_to_rbind.RDS")
@@ -665,5 +620,8 @@ cols_toadd = setdiff(colnames(job_groups_without_investigations_df), colnames(jo
 # finally, combine all jobs with and without investigations
  final_df <- rbind.data.frame(all_jobs_with_investigations, all_jobs_without_investigations)
  
-saveRDS(final_df, "intermediate/final_df.RDS")
-write.csv(final_df, "intermediate/final_df.csv")
+ 
+ #CHANGES HERE?
+ 
+saveRDS(final_df, "intermediate/trla_final_df.RDS")
+write.csv(final_df, "intermediate/trla_final_df.csv")
