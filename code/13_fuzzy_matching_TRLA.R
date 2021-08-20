@@ -108,7 +108,8 @@ merge_matches <- function(jobs_formerge, trla_formerge, match_object){
 h2a <- read.csv("intermediate/h2a_combined_2014-2021.csv")
 
 # load in investigations/violations data
-trla_cases <- read.csv("intermediate/cleaned_TRLA_formerge.csv")
+trla_cases <- read.csv("intermediate/cleaned_TRLA_formerge.csv") %>%
+  filter(derived_opponent_state %in% c("TX","KY","LA","MS","AL","TN","AR"))
 
 
 ################
@@ -242,7 +243,7 @@ stopifnot(length(unique(approved_deduped_formatch$jobs_group_id)) == nrow(approv
 
 #Skip deduping for TRLA data?
 
-dedupe_fields = c("name", "derived_opponent_state")
+dedupe_fields = c("name")
 
 RUN_DEDUPE_I = TRUE
 if(RUN_DEDUPE_I){
@@ -258,14 +259,49 @@ if(RUN_DEDUPE_I){
   saveRDS(trla_deduped, "intermediate/trla_dedupe.RDS")
 
 } else{
-  investigations_deduped = readRDS("intermediate/trla_dedupe.RDS")
+  trla_deduped = readRDS("intermediate/trla_dedupe.RDS")
 }
+
 
 ## similarly, create a row id and group id
 ## construct two ids: (1) row_id (previously merging_index) and (2) rename dedupe_id to something more descriptive
 trla_cases_clean = trla_deduped %>%
   mutate(trla_investigations_row_id = 1:nrow(trla_cases)) %>%
   rename(trla_investigations_group_id = dedupe.ids)
+
+
+#JUST ADDED
+
+# Thus, adjust the investigations_group_id so that each combination of investigations_group_id and state maps to a unique index
+# First create a part 2 of the index that will correspond to the state within a particular investigations_group_id
+trla_cases_clean <- trla_cases_clean %>%
+  group_by(trla_investigations_group_id) %>%
+  mutate(trla_investigations_group_id_part2 = as.integer(factor(derived_opponent_state))) %>%
+  ungroup() %>%
+  rename(trla_investigations_group_id_part1 = trla_investigations_group_id)
+
+# Then concatenate this part2 index with the original index to create a new and more accurate index
+trla_cases_clean$trla_investigations_group_id <- str_c(trla_cases_clean$trla_investigations_group_id_part1, trla_cases_clean$trla_investigations_group_id_part2, sep = "_")
+
+# confirm that this worked successfully
+test <- trla_cases_clean %>%
+  group_by(trla_investigations_group_id) %>%
+  mutate(is_same_state = ifelse(length(unique(derived_opponent_state)) == 1, TRUE, FALSE)) %>%
+  ungroup()
+
+table(test$is_same_state) # all are TRUE,this was successful
+
+# also confirm that investigations matched during de-deduping and in the same state have the same id
+test <- trla_cases_clean %>%
+  group_by(trla_investigations_group_id_part1, derived_opponent_state) %>%
+  mutate(is_same_id = ifelse(length(unique(trla_investigations_group_id)) == 1, TRUE, FALSE)) %>%
+  ungroup()
+
+table(test$is_same_id) # all are TRUE,this was successful
+
+
+
+
 
 # save before we filter out duplicates
 saveRDS(trla_cases_clean, "intermediate/trla_investigations_filtered_pre_deduping.RDS")
@@ -313,11 +349,7 @@ fuzzy_matching <- function(state, jobs_df, trla_investigations_df){
   return(merging)
 }
 
-# find all states in one of the datasets
-all_states <- unique(approved_deduped_clean$state_formatch)
-
-# Not all states will be in both datasets, so keep just the 
-all_states_keep <- all_states[(all_states %in% trla_cases_clean$derived_opponent_state)]
+all_states_keep <- c("TX","KY","LA","MS","AL","TN", "AR")
 
 
 RUN_FULL_MATCH = TRUE
@@ -341,11 +373,6 @@ if(RUN_FULL_MATCH){
   all_states_final_df = readRDS("intermediate/trla_fuzzy_matching_final.RDS") %>% select(-index)
 }
 
-### !! STUCK HERE !! ###
-
-#ERROR: cannot coerce class 'c("fastLink", "matchesLink")' to a data.frame
-#Warnings: In gammaCKpar(dfA[, varnames[i]], dfB[, varnames[i]],  ... :
-#There are no partial matches. We suggest either changing the value of cut.p or using gammaCK2par() instead
 
 #################
 # Add duplicates back in: trla investigations
@@ -355,7 +382,7 @@ if(RUN_FULL_MATCH){
 ## these are: (1) trla_investigations filtered out in dedup, (2) in relevant states, and 
 ## (3) group id is in match results, indicating that other trla_investigations in the group matched
 
-investigations_toadd = trla_investigations_deduped_clean %>% filter(!trla_investigations_row_id %in% 
+investigations_toadd = trla_cases_clean %>% filter(!trla_investigations_row_id %in% 
                                                                  trla_investigations_deduped_formatch$trla_investigations_row_id &
                                                                  derived_opponent_state %in% all_states_keep &
                                                                  trla_investigations_group_id %in% 
@@ -363,25 +390,36 @@ investigations_toadd = trla_investigations_deduped_clean %>% filter(!trla_invest
 
 ## add additional matches and fill values within a group id
 investigations_toadd_wjobid = merge(investigations_toadd,
-                                    all_states_final_df %>% filter(is_matched_investigations) %>% 
+                                    all_states_final_df %>% 
+                                      filter(is_matched_investigations) %>% 
                                       select(jobs_row_id,
                                              jobs_group_id,
                                              trla_investigations_group_id),
                                     by = "trla_investigations_group_id",
                                     all.x = TRUE) %>%
-  rename(trla_city_investigations = city,
-         trla_name_investigations = name)
+  rename(city_investigations = city,
+         name_investigations = name)
 
 
 ## add blank cols for the jobs cols before rbind
+
 cols_toadd = setdiff(colnames(all_states_final_df), colnames(investigations_toadd_wjobid))
+
 cols_tocbind = data.frame(matrix(NA, nrow = nrow(investigations_toadd_wjobid),
                                  ncol = length(cols_toadd))) 
+
 colnames(cols_tocbind) = cols_toadd
+
 investigations_torbind = cbind.data.frame(investigations_toadd_wjobid,
-                                          cols_tocbind) %>% mutate(is_matched_investigations = TRUE)
+                                          cols_tocbind) %>% 
+  mutate(is_matched_investigations = TRUE)
+
+
+
+
 matchres_allinvest = rbind.data.frame(all_states_final_df,
                                       investigations_torbind) 
+
 
 ## group by investigations group id and fill in values for jobs
 jobs_cols = cols_toadd
@@ -389,10 +427,16 @@ matchres_allinvest_fill = matchres_allinvest %>% group_by(trla_investigations_gr
   fill(jobs_cols, .direction = "downup") %>%
   ungroup() 
 
+
 ### check: look at values for investigation added in
-test_investigation = investigations_torbind %>% slice(1) %>% pull(trla_investigations_group_id)
-head(investigations_toadd_wjobid %>% filter(investigations_group_id %in% test_investigation))
-View(matchres_allinvest_fill %>% filter(investigations_group_id %in% test_investigation) %>% select(contains("id")))
+test_investigation = investigations_torbind %>% 
+  slice(1) %>% 
+  pull(trla_investigations_group_id)
+head(investigations_toadd_wjobid %>% 
+       filter(trla_investigations_group_id %in% test_investigation))
+View(matchres_allinvest_fill %>% 
+       filter(trla_investigations_group_id %in% test_investigation) %>% 
+       select(contains("id")))
 
 
 #################
@@ -436,7 +480,7 @@ test_df <- job_groups_with_investigations_df %>%
   sample_n(5)
 
 # create list
-# id_4 <- "1378_3"
+id_4 <- "1378_3"
 list_of_dfs_to_rbind <- list()
 
 # for each group_id that matched to an investigation,
@@ -450,12 +494,12 @@ for (group_id in unique(job_groups_with_investigations_df$jobs_group_id))
   rbound_df <- data.frame()
   
   # then for each investigation in this dataset,
-  for (row_id in temp_data$investigations_row_id)
+  for (row_id in temp_data$trla_investigations_row_id)
   {
     
     # isolate the row with the investigation
     each_investigation <- temp_data %>%
-      filter(investigations_row_id == row_id)
+      filter(trla_investigations_row_id == row_id)
     
     # re-duplicate for this particular investigation
     particular_jobs_removed_when_dedup <- jobs_removed_whendedup %>% # is there an issue if this is an empty dataset
@@ -500,7 +544,6 @@ all_jobs_with_investigations <- do.call(rbind.data.frame, list_of_dfs_to_rbind)
 
 # check that the output is as expected:
 # choose 3 jobs that had investigations and confirm the re-duplication was correct
-
 test_df <- job_groups_with_investigations_df[sample(nrow(job_groups_with_investigations_df), 3), ]
 
 # Check the first
@@ -509,15 +552,15 @@ id_1 <- test_df$jobs_group_id[1]
 
 # see if it had any duplicates
 View(approved_deduped_clean %>%
-  filter(jobs_group_id == id_1)) # it did not
+  filter(jobs_group_id == id_1)) # 25
 
 # see how many investigations it mapped to
 View(matchres_allinvest_fill %>%
-  filter(jobs_group_id == id_1)) # just 1
+  filter(jobs_group_id == id_1)) # 5 - different case numbers (dedupe ids are all the same...)
 
 # make sure we just get one row in re-duplication
 View(all_jobs_with_investigations %>%
-  filter(jobs_group_id == id_1)) # we do
+  filter(jobs_group_id == id_1))
 
 # Check the second
 # grab its group_id
@@ -525,15 +568,16 @@ id_2 <- test_df$jobs_group_id[2]
 
 # see if it had any duplicates
 View(approved_deduped_clean %>%
-  filter(jobs_group_id == id_2)) # 12 duplicates
+  filter(jobs_group_id == id_2)) # 3 duplicates
 
 # see how many investigations it mapped to
 View(matchres_allinvest_fill %>%
-  filter(jobs_group_id == id_2)) # just 1
+  filter(jobs_group_id == id_2)) # 2
 
-# make sure we get 13 rows in re-duplication, and that they're filled correctly
+#It all matches to the same AP name but there are multiple cases
 View(all_jobs_with_investigations %>%
-  filter(jobs_group_id == id_2)) # we do
+  filter(jobs_group_id == id_2)) 
+
 
 # Check the third
 # grab its group_id
@@ -541,15 +585,15 @@ id_3 <- test_df$jobs_group_id[3]
 
 # see if it had any duplicates
 View(approved_deduped_clean %>%
-  filter(jobs_group_id == id_3)) # 8 duplicates
+  filter(jobs_group_id == id_3)) # 14 duplicates
 
 # see how many investigations it mapped to
 View(matchres_allinvest_fill %>%
-  filter(jobs_group_id == id_3)) # just 1
+  filter(jobs_group_id == id_3)) # 4
 
-# make sure we get 9 rows during re-duplication, and they are filled correctly
+# make sure we get X rows during re-duplication, and they are filled correctly
 View(all_jobs_with_investigations %>%
-  filter(jobs_group_id == id_3)) # we do
+  filter(jobs_group_id == id_3)) 
 
 # find one with multiple investigations, no duplicates
 matchres_allinvest_fill %>%
@@ -558,23 +602,27 @@ matchres_allinvest_fill %>%
   arrange(-n)
 
 # now lets look for one with duplicates and multiple investigations
-id_4 <- "1378_3"
+id_4 <- "4333_1"
 
 View(approved_deduped_clean %>%
-  filter(jobs_group_id == id_4)) # 24 duplicates
+  filter(jobs_group_id == id_4)) # 16 duplicates
 
 # see how many investigations it mapped to
 View(matchres_allinvest_fill %>%
-  filter(jobs_group_id == id_4)) # 11 investigations
+  filter(jobs_group_id == id_4)) # 25 investigations
 
 # make sure we get 275 rows during re-duplication, and they are filled correctly
 test <- all_jobs_with_investigations %>%
   filter(jobs_group_id == id_4) # we do!
 
 
+
+
 #################
 # Re-duplicate jobs that did not match to investigations
 #################
+##LIZZIE NOTE: This section is confusing for me, and I can't tell if I'm achieving desired results.
+
 
 # Isolate the jobs to merge on
 jobs_removed_whendedup_no_invest <- jobs_removed_whendedup %>%
@@ -611,16 +659,14 @@ cols_toadd = setdiff(colnames(job_groups_without_investigations_df), colnames(jo
  View(matchres_allinvest_fill %>%
         filter(jobs_group_id == id_2)) # none
  
- # make sure we get 8 rows in re-duplication and they are filled correctt
+ # make sure we get 8 rows in re-duplication and they are filled correct
  View(all_jobs_without_investigations %>%
         filter(jobs_group_id == id_2)) # we do
 
 
 # finally, combine all jobs with and without investigations
  final_df <- rbind.data.frame(all_jobs_with_investigations, all_jobs_without_investigations)
- 
- 
- #CHANGES HERE?
+
  
 saveRDS(final_df, "intermediate/trla_final_df.RDS")
 write.csv(final_df, "intermediate/trla_final_df.csv")
