@@ -51,5 +51,4 @@ tract_intersect_id.drop(["geo_lat","geo_long", "geo_accuracy", "geo_accuracy_typ
 ## merge 2014-2019 acs data
 combined_acs = pd.concat([df_acs_2014, df_acs_2015, df_acs_2016, df_acs_2017, df_acs_2018, df_acs_2019])
 job_with_acs = tract_intersect_id.merge(combined_acs, on= ["data_source", "GEO_ID"], how="left")
-# job_with_acs.shape
-job_with_acs.to_pickle(PREDICTORS_WRITEFOLDER + "job_combined_acs_premerging" + ".pkl")
+job_with_acs.to_csv(PREDICTORS_WRITEFOLDER + "job_combined_acs_premerging" + ".csv")
