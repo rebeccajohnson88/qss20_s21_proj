@@ -1,4 +1,5 @@
-# dummies?/"others" -> traintest -> imputation
+# atturney split -> dummies -> traintest -> imputation
+# df['ATTORNEY_AGENT_NAME'].value_counts()
 
 ##### imports
 import random
@@ -113,18 +114,6 @@ print(preMatrix.shape)
 print(preMatrix.nunique(axis=0))
 #print(preMatrix.info(verbose=True, show_counts=True))
 
-## change some row values to others according to value count of the column
-# what columns we want to change?
-preMatrix = gen_topk_dummies(preMatrix,"ATTORNEY_AGENT_NAME",0.01)
-
-# do a train test split
-# split into train and test sets (80/20)
-
-# split on job group id: 'jobs_group_id'
-# X_train, X_test, y_train, y_test = train_test_split(imputed_cat_feature_pre, y, test_size=0.20, random_state=1)
-X_train, X_test, y_train, y_test = train_test_split(preMatrix, y1, test_size=0.20, random_state=3)
-
-#### data imputation
 ## seperate num/cat columns
 numeric_options = ["int64", "float64", "datetime64[ns]"]
 num_cols = [one for one in preMatrix.columns if preMatrix.dtypes[one] in numeric_options] # all nums are actually dates
@@ -139,6 +128,20 @@ print('Numeric Columns:')
 print(num_cols)
 print('\nSelected Categorical Columns:')
 print(selected_cat_large)
+
+
+## change some row values to others according to value count of the column
+# what columns we want to change?
+preMatrix = gen_topk_dummies(preMatrix,"ATTORNEY_AGENT_NAME",0.01)
+
+# do a train test split
+# split into train and test sets (80/20)
+
+# split on job group id: 'jobs_group_id'
+# X_train, X_test, y_train, y_test = train_test_split(imputed_cat_feature_pre, y, test_size=0.20, random_state=1)
+X_train, X_test, y_train, y_test = train_test_split(preMatrix, y1, test_size=0.20, random_state=3)
+
+#### data imputation
 
 # get the categorical features in one dataframe
 cat_feature_pre = preMatrix.loc[:, selected_cat_large].copy()
@@ -158,17 +161,17 @@ imputed_cat_feature_pre.columns = cat_feature_pre.columns
 #imputed_num_feature_pre = pd.DataFrame(imputer_num.fit_transform(num_feature_pre))
 #imputed_num_feature_pre.columns = num_feature_pre.columns
 imputed_num_feature_pre = num_feature_pre.copy()
-print(num_feature_pre.isnull().sum())
+#print(num_feature_pre.isnull().sum())
 
-for col in num_cols:
-    imputed_num_feature_pre[col].replace(pd.NaT, imputed_num_feature_pre[col].mode().iloc[0])
+#for col in num_cols:
+#    imputed_num_feature_pre[col].replace(pd.NaT, imputed_num_feature_pre[col].mode().iloc[0])
     #a = (imputed_num_feature_pre[col].mode())
     #imputed_num_feature_pre[col].fillna(a)
 
 print("Shape of imputed: ")
 print(imputed_cat_feature_pre.shape)
 print(imputed_num_feature_pre.shape)
-print(imputed_num_feature_pre.isnull().sum())
+#print(imputed_num_feature_pre.isnull().sum())
 
 imputed_combined = pd.merge(imputed_cat_feature_pre.reset_index(),
                             imputed_num_feature_pre.reset_index(), how='left',
@@ -178,4 +181,4 @@ print(imputed_combined.shape)
 imputed_combined = imputed_combined.drop(columns = 'index')
 
 # apply the oneHotEncoder within prepare_inputs
-X_train, X_test = prepare_inputs(X_train, X_test)
+#X_train, X_test = prepare_inputs(X_train, X_test)
