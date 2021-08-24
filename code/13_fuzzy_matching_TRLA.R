@@ -124,8 +124,8 @@ h2a$status_cleaned = status
 approved_only <- h2a %>%
   filter(status_cleaned == "- CERTIFICATION" | status_cleaned == "- PARTIAL CERTIFICATION") %>%
   filter(EMPLOYER_NAME != "") %>%
-  mutate(state_formatch = ifelse(EMPLOYER_STATE == "", 
-                                 WORKSITE_STATE, EMPLOYER_STATE)) # typically use employer state but worksite state if missing
+  mutate(state_formatch = ifelse(WORKSITE_STATE == "", 
+                                 EMPLOYER_STATE, WORKSITE_STATE)) # typically use worksite state but employer state if missing
 
 sprintf("After filtering to approved only and non-missing names, we go from %s rows to %s rows",
         nrow(h2a),
