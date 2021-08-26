@@ -124,5 +124,5 @@ brewer.pal(8, "Dark2")
 display.brewer.pal(8, "Dark2")
 
 
-# shading post covid?
+# shading post covid
 
