@@ -11,6 +11,7 @@
 library(lubridate)
 library(fastLink)
 library(tidyverse)
+library(data.table)
 
 RUN_FROM_CONSOLE = FALSE
 if(RUN_FROM_CONSOLE){
@@ -29,7 +30,9 @@ setwd(DATA_DIR)
 #####################
 
 # matched data with de-duped datasets
-matched_data_WHD <- readRDS("intermediate/final_df.RDS")
+matched_data_WHD <- read.csv("clean/h2a_WHD_matched.csv", 
+                             colClasses = c("is_matched_investigations" = "logical")) 
+
 
 ####################
 # Some descriptives
@@ -67,7 +70,7 @@ matched_data_WHD <- matched_data_WHD %>%
          JOB_START_DATE = ymd(JOB_START_DATE),
          JOB_END_DATE = gsub(x = JOB_END_DATE, pattern = " 00:00:00.000000", replacement = ""),
          JOB_END_DATE = ymd(JOB_END_DATE)) %>%
-      rename(reg_act = `Registration Act`) 
+      rename(reg_act = Registration.Act) 
 
 
 #############################
@@ -108,9 +111,8 @@ matched_data_trla <- matched_data_trla %>%
          JOB_START_DATE = ymd(JOB_START_DATE),
          JOB_END_DATE = gsub(x = JOB_END_DATE, pattern = " 00:00:00.000000", replacement = ""),
          JOB_END_DATE = ymd(JOB_END_DATE)) %>%
-  rename(reg_act = `Registration Act`) %>%
   mutate(outcome_is_any_investigation_trla = is_matched_investigations,
-         ## in case of trla since the dates aren't a timespan but instead a 
+         ## in case of trla since the dates aren't a timespan but instead a sngle intake date
          outcome_is_investigation_overlapsd_trla = ifelse(is_matched_investigations & intake_date >= JOB_START_DATE, TRUE, FALSE),
          outcome_is_investigation_before_sd_trla = ifelse(is_matched_investigations & intake_date < JOB_START_DATE, TRUE, FALSE))
 
@@ -123,16 +125,28 @@ matched_data_trla <- matched_data_trla %>%
 ## (2) trla states (used for TRLA versus WHD comparisons)
 #####################
 
+acs_pred = fread("intermediate/job_combined_acs_premerging.csv") %>% select(-V1)
 
-#############################
-# LAter create outcome variables with TRLA
-#############################
+## here- fix renaming so that it's the renamed census vars and not the original ones
 
-saveRDS(matched_data, "clean/jobs_formod.RDS")
-write.csv(matched_data, "clean/jobs_formod.csv", row.names = FALSE) 
+## find variables to merge on; address and case number (7 with 2 that will be duplicated)
+merge_vars = c("CASE_NUMBER", "EMPLOYER_FULLADDRESS")
+jobs_noacs = setdiff(matched_data_WHD$EMPLOYER_FULLADDRESS, acs_pred$EMPLOYER_FULLADDRESS)
+new_acsvars = setdiff(colnames(acs_pred), colnames(matched_data_WHD))
+acs_pred_tomerge = acs_pred %>% select(all_of(new_acsvars), all_of(merge_vars))
 
-## save version with col classes
-matched_data_colclass = data.frame(vars = colnames(matched_data),
-                                   class = sapply(matched_data, function(x) class(x)))
+## merge onto WHD dataset using case_number and full address
+matched_data_WHD_wACS = merge(matched_data_WHD ,
+                              acs_pred_tomerge,
+                              all.x = TRUE,
+                              by = c("CASE_NUMBER", "EMPLOYER_FULLADDRESS"))
+
+## look at ones that are duplicated and filter to 1
+
+
+
+## Write two outputs:
+## one with WHD only (matched_data_WHD_wACS)
+## another with that + TRLA outcomes (merge using job_row_id) filtered to the 7 TRLA catchment states 
 
 
