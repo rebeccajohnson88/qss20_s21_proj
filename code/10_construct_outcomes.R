@@ -117,7 +117,31 @@ matched_data_trla <- matched_data_trla %>%
          outcome_is_investigation_before_sd_trla = ifelse(is_matched_investigations & intake_date < JOB_START_DATE, TRUE, FALSE))
 
 
+#####################
+# write diff files
+#####################
 
+saveRDS(matched_data_WHD, "intermediate/whd_violations.RDS")
+
+## merge on trla outcomes
+matched_data_WHD_wTRLA = merge(matched_data_WHD %>% filter(EMPLOYER_STATE %in% c("AL",
+                              "AR", "KY", "LA", "MS", "TN", "TX")), 
+                              matched_data_trla %>% select(jobs_row_id, contains("outcome")),
+                               by = "jobs_row_id",
+                               all.x = TRUE) %>%
+          mutate(outcome_compare_TRLA_WHD = case_when(outcome_is_investigation_overlapsd & 
+                                                outcome_is_investigation_overlapsd_trla ~ "Both TRLA and WHD",
+                                                outcome_is_investigation_overlapsd & 
+                                              !outcome_is_investigation_overlapsd_trla ~ "WHD; not TRLA",
+                                              !outcome_is_investigation_overlapsd & 
+                                            outcome_is_investigation_overlapsd_trla ~ "TRLA; not WHD",
+                                            TRUE ~ "Neither WHD nor TRLA"))
+
+
+saveRDS(matched_data_WHD_wTRLA, "intermediate/whd_violations_wTRLA_catchmentonly.RDS")
+
+library(RColorBrewer)
+display.brewer.pal(8, "Dark2")
 #####################
 # next merge ACS onto each
 # and create two datasets:
