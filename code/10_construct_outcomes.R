@@ -9,8 +9,7 @@ library(reshape2)
 library('xml2')
 library(RCurl)
 library(rlist)
-install.packages("rlist")
-install.packages("RCurl")
+
 
 RUN_FROM_CONSOLE = FALSE
 if(RUN_FROM_CONSOLE){
@@ -155,8 +154,10 @@ merged_acs_codebook_subset <- merged_acs_codebook %>%
   select(CASE_NUMBER, EMPLOYER_FULLADDRESS, value, renamed_variable_name)
 
 ## (5) melt back to wide
-#merged_acs_codebook_wide <- dcast(merged_acs_codebook_subset, CASE_NUMBER ~ renamed_variable_name)
-merged_acs_codebook_wide <-reshape(merged_acs_codebook_subset, id.var = c("CASE_NUMBER","EMPLOYER_FULLADDRESS") , timevar = "renamed_variable_name", direction = "wide")
+names_acsvars <- pull(merged_acs_codebook_subset, renamed_variable_name)
+class(names_acsvars) 
+merged_acs_codebook_wide <- dcast(formula(sprintf("CASE_NUMBER + EMPLOYER_FULLADDRESS ~ %s" ~ paste(names_acsvars, collapse = "+"))), data = merged_acs_codebook_subset)
+head(merged_acs_codebook_wide)
 
 
 ## find variables to merge on; address and case number (7 with 2 that will be duplicated)
