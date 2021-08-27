@@ -1,17 +1,16 @@
 ##########################
-# This code constructs outcome variables on the matched data
-# Author: Cam Guage 
-# Written: 7/16/2021
-##########################
-
-##########################
 # Packages and Imports
 ##########################
-
 library(lubridate)
 library(fastLink)
 library(tidyverse)
 library(data.table)
+library(reshape2)
+library('xml2')
+library(RCurl)
+library(rlist)
+install.packages("rlist")
+install.packages("RCurl")
 
 RUN_FROM_CONSOLE = FALSE
 if(RUN_FROM_CONSOLE){
@@ -20,7 +19,7 @@ if(RUN_FROM_CONSOLE){
 } else{
   #DATA_DIR = "~/Dropbox (Dartmouth College)/qss20_finalproj_rawdata/summerwork"
   #DATA_DIR = "C:/Users/Austin Paralegal/Dropbox/qss20_finalproj_rawdata/summerwork"
-  DATA_DIR = "~/Dropbox/qss20_finalproj_rawdata/summerwork/"
+  DATA_DIR = "/Users/euniceliu/Dropbox (Dartmouth College)/qss20_finalproj_rawdata/summerwork"
 }
 
 setwd(DATA_DIR)
@@ -32,7 +31,6 @@ setwd(DATA_DIR)
 # matched data with de-duped datasets
 matched_data_WHD <- read.csv("clean/h2a_WHD_matched.csv", 
                              colClasses = c("is_matched_investigations" = "logical")) 
-
 
 ####################
 # Some descriptives
@@ -70,7 +68,7 @@ matched_data_WHD <- matched_data_WHD %>%
          JOB_START_DATE = ymd(JOB_START_DATE),
          JOB_END_DATE = gsub(x = JOB_END_DATE, pattern = " 00:00:00.000000", replacement = ""),
          JOB_END_DATE = ymd(JOB_END_DATE)) %>%
-      rename(reg_act = Registration.Act) 
+  rename(reg_act = Registration.Act) 
 
 
 #############################
@@ -84,7 +82,7 @@ matched_data_WHD <- matched_data_WHD %>%
          outcome_is_investigation_overlapsd = ifelse(is_matched_investigations & findings_start_date >= JOB_START_DATE & findings_start_date <= JOB_END_DATE, TRUE, FALSE),
          outcome_is_viol_overlapsd = ifelse(is_matched_investigations & findings_start_date >= JOB_START_DATE & findings_start_date <= JOB_END_DATE & h2a_violtn_cnt > 0, TRUE, FALSE),
          outcome_is_h2areg_investigation_overlapsd = ifelse(is_matched_investigations & findings_start_date >= JOB_START_DATE & findings_start_date <= JOB_END_DATE &
-                                                          reg_act == "H2A", TRUE, FALSE))
+                                                              reg_act == "H2A", TRUE, FALSE))
 
 ## see that broader definition of including registration acts other than h2a only picks up 15 additional
 ## investigations so use normal one
@@ -117,31 +115,7 @@ matched_data_trla <- matched_data_trla %>%
          outcome_is_investigation_before_sd_trla = ifelse(is_matched_investigations & intake_date < JOB_START_DATE, TRUE, FALSE))
 
 
-#####################
-# write diff files
-#####################
 
-saveRDS(matched_data_WHD, "intermediate/whd_violations.RDS")
-
-## merge on trla outcomes
-matched_data_WHD_wTRLA = merge(matched_data_WHD %>% filter(EMPLOYER_STATE %in% c("AL",
-                              "AR", "KY", "LA", "MS", "TN", "TX")), 
-                              matched_data_trla %>% select(jobs_row_id, contains("outcome")),
-                               by = "jobs_row_id",
-                               all.x = TRUE) %>%
-          mutate(outcome_compare_TRLA_WHD = case_when(outcome_is_investigation_overlapsd & 
-                                                outcome_is_investigation_overlapsd_trla ~ "Both TRLA and WHD",
-                                                outcome_is_investigation_overlapsd & 
-                                              !outcome_is_investigation_overlapsd_trla ~ "WHD; not TRLA",
-                                              !outcome_is_investigation_overlapsd & 
-                                            outcome_is_investigation_overlapsd_trla ~ "TRLA; not WHD",
-                                            TRUE ~ "Neither WHD nor TRLA"))
-
-
-saveRDS(matched_data_WHD_wTRLA, "intermediate/whd_violations_wTRLA_catchmentonly.RDS")
-
-library(RColorBrewer)
-display.brewer.pal(8, "Dark2")
 #####################
 # next merge ACS onto each
 # and create two datasets:
@@ -150,8 +124,40 @@ display.brewer.pal(8, "Dark2")
 #####################
 
 acs_pred = fread("intermediate/job_combined_acs_premerging.csv") %>% select(-V1)
+head(acs_pred)
+head(matched_data_WHD)
 
 ## here- fix renaming so that it's the renamed census vars and not the original ones
+## (1) subset acs data
+acs_subset <- acs_pred %>% select(intersect(starts_with('B') , ends_with('E')),"CASE_NUMBER", "EMPLOYER_FULLADDRESS" )
+
+head(acs_subset)
+## (2) melt to long format
+acs_subset_long <- melt(setDT(acs_subset), id.vars = c("CASE_NUMBER","EMPLOYER_FULLADDRESS"), variable.name = "variable")
+
+## (3) merge with codebook
+url <- "https://api.census.gov/data/2014/acs/acs5/variables.html"
+install.packages("rvest")
+library(rvest)
+codebook_tab <- url %>%  read_html() %>%  html_table()
+codebook_tab <- as.data.frame(codebook_tab)
+codebook_tab = codebook_tab[-(1:5), , drop = FALSE]
+head(acs_subset_long)
+colnames(codebook_tab)[which(names(codebook_tab) == "Name")] <- "variable"
+merged_acs_codebook = merge(acs_subset_long ,
+                            codebook_tab,
+                            all.x = TRUE,
+                            by = "variable")
+## (4) renamed col
+merged_acs_codebook$renamed_variable_name <- paste(merged_acs_codebook$Label, "-", merged_acs_codebook$Concept)
+head(merged_acs_codebook)
+merged_acs_codebook_subset <- merged_acs_codebook %>%
+  select(CASE_NUMBER, EMPLOYER_FULLADDRESS, value, renamed_variable_name)
+
+## (5) melt back to wide
+#merged_acs_codebook_wide <- dcast(merged_acs_codebook_subset, CASE_NUMBER ~ renamed_variable_name)
+merged_acs_codebook_wide <-reshape(merged_acs_codebook_subset, id.var = c("CASE_NUMBER","EMPLOYER_FULLADDRESS") , timevar = "renamed_variable_name", direction = "wide")
+
 
 ## find variables to merge on; address and case number (7 with 2 that will be duplicated)
 merge_vars = c("CASE_NUMBER", "EMPLOYER_FULLADDRESS")
@@ -172,5 +178,3 @@ matched_data_WHD_wACS = merge(matched_data_WHD ,
 ## Write two outputs:
 ## one with WHD only (matched_data_WHD_wACS)
 ## another with that + TRLA outcomes (merge using job_row_id) filtered to the 7 TRLA catchment states 
-
-
