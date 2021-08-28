@@ -6,9 +6,7 @@ library(fastLink)
 library(tidyverse)
 library(data.table)
 library(reshape2)
-library('xml2')
-library(RCurl)
-library(rlist)
+
 
 
 RUN_FROM_CONSOLE = FALSE
@@ -16,9 +14,9 @@ if(RUN_FROM_CONSOLE){
   args <- commandArgs(TRUE)
   DATA_DIR = args[1]
 } else{
-  #DATA_DIR = "~/Dropbox (Dartmouth College)/qss20_finalproj_rawdata/summerwork"
+  DATA_DIR = "~/Dropbox/qss20_finalproj_rawdata/summerwork"
   #DATA_DIR = "C:/Users/Austin Paralegal/Dropbox/qss20_finalproj_rawdata/summerwork"
-  DATA_DIR = "/Users/euniceliu/Dropbox (Dartmouth College)/qss20_finalproj_rawdata/summerwork"
+  #DATA_DIR = "/Users/euniceliu/Dropbox (Dartmouth College)/qss20_finalproj_rawdata/summerwork"
 }
 
 setwd(DATA_DIR)
@@ -123,59 +121,73 @@ matched_data_trla <- matched_data_trla %>%
 #####################
 
 acs_pred = fread("intermediate/job_combined_acs_premerging.csv") %>% select(-V1)
-head(acs_pred)
-head(matched_data_WHD)
 
 ## here- fix renaming so that it's the renamed census vars and not the original ones
 ## (1) subset acs data
-acs_subset <- acs_pred %>% select(intersect(starts_with('B') , ends_with('E')),"CASE_NUMBER", "EMPLOYER_FULLADDRESS" )
+acs_subset <- acs_pred %>% select(intersect(starts_with('B') , ends_with('E')),"CASE_NUMBER", "EMPLOYER_FULLADDRESS",
+                                  GEO_ID)
 
-head(acs_subset)
+
 ## (2) melt to long format
-acs_subset_long <- melt(setDT(acs_subset), id.vars = c("CASE_NUMBER","EMPLOYER_FULLADDRESS"), variable.name = "variable")
+acs_subset_long <- melt(setDT(acs_subset), id.vars = c("CASE_NUMBER","EMPLOYER_FULLADDRESS",
+                                                       "GEO_ID"), variable.name = "variable")
 
 ## (3) merge with codebook
-url <- "https://api.census.gov/data/2014/acs/acs5/variables.html"
-install.packages("rvest")
-library(rvest)
-codebook_tab <- url %>%  read_html() %>%  html_table()
-codebook_tab <- as.data.frame(codebook_tab)
-codebook_tab = codebook_tab[-(1:5), , drop = FALSE]
-head(acs_subset_long)
-colnames(codebook_tab)[which(names(codebook_tab) == "Name")] <- "variable"
+codebook_tab = read.csv("intermediate/predictors_acs_varname.csv") %>%
+            mutate(variable = sprintf("%sE", name))
 merged_acs_codebook = merge(acs_subset_long ,
                             codebook_tab,
                             all.x = TRUE,
-                            by = "variable")
+                            by = "variable") 
+
+
+merged_acs_codebook = merged_acs_codebook %>%
+                mutate(renamed_variable_name = sprintf("acs_%s_%s", gsub("Estimate!!Total!!", "", label),
+                                                      gsub("\\s+|\\(|\\)", "_", concept))) 
 ## (4) renamed col
-merged_acs_codebook$renamed_variable_name <- paste(merged_acs_codebook$Label, "-", merged_acs_codebook$Concept)
-head(merged_acs_codebook)
 merged_acs_codebook_subset <- merged_acs_codebook %>%
-  select(CASE_NUMBER, EMPLOYER_FULLADDRESS, value, renamed_variable_name)
+  select(CASE_NUMBER, EMPLOYER_FULLADDRESS, value, renamed_variable_name, GEO_ID) %>%
+  distinct()
 
-## (5) melt back to wide
-names_acsvars <- pull(merged_acs_codebook_subset, renamed_variable_name)
-class(names_acsvars) 
-merged_acs_codebook_wide <- dcast(formula(sprintf("CASE_NUMBER + EMPLOYER_FULLADDRESS ~ %s" ~ paste(names_acsvars, collapse = "+"))), data = merged_acs_codebook_subset)
-head(merged_acs_codebook_wide)
+## (5) reshape back to wide
+merged_acs_codebook_wide <- dcast(CASE_NUMBER + EMPLOYER_FULLADDRESS + GEO_ID ~ renamed_variable_name,
+                                  value.var = "value",
+                                  data = merged_acs_codebook_subset,
+                                  fun.aggregate = mean)
 
+#####################
+# Finish merges
+#####################
 
 ## find variables to merge on; address and case number (7 with 2 that will be duplicated)
 merge_vars = c("CASE_NUMBER", "EMPLOYER_FULLADDRESS")
-jobs_noacs = setdiff(matched_data_WHD$EMPLOYER_FULLADDRESS, acs_pred$EMPLOYER_FULLADDRESS)
-new_acsvars = setdiff(colnames(acs_pred), colnames(matched_data_WHD))
-acs_pred_tomerge = acs_pred %>% select(all_of(new_acsvars), all_of(merge_vars))
+
 
 ## merge onto WHD dataset using case_number and full address
 matched_data_WHD_wACS = merge(matched_data_WHD ,
-                              acs_pred_tomerge,
+                              merged_acs_codebook_wide,
                               all.x = TRUE,
                               by = c("CASE_NUMBER", "EMPLOYER_FULLADDRESS"))
 
-## look at ones that are duplicated and filter to 1
+## then, merge onto TRLA 
+matched_data_WHD_wTRLA = merge(matched_data_WHD_wACS %>% filter(EMPLOYER_STATE %in% c("AL",
+                                                                                 "AR", "KY", "LA", "MS", "TN", "TX")),
+                               matched_data_trla %>% select(jobs_row_id, contains("outcome")),
+                               by = "jobs_row_id",
+                               all.x = TRUE) %>%
+  mutate(outcome_compare_TRLA_WHD = case_when(outcome_is_investigation_overlapsd &
+                                                outcome_is_investigation_overlapsd_trla ~ "Both TRLA and WHD",
+                                              outcome_is_investigation_overlapsd &
+                                                !outcome_is_investigation_overlapsd_trla ~ "WHD; not TRLA",
+                                              !outcome_is_investigation_overlapsd &
+                                                outcome_is_investigation_overlapsd_trla ~ "TRLA; not WHD",
+                                              TRUE ~ "Neither WHD nor TRLA"))
 
+## trla file 
+saveRDS(matched_data_WHD_wTRLA, "clean/whd_violations_wTRLA_catchmentonly.RDS")
+fwrite(matched_data_WHD_wTRLA, "clean/whd_violations_wTRLA_catchmentonly.csv")
 
+## general file 
+saveRDS(matched_data_WHD_wACS, "clean/whd_violations.RDS")
+fwrite(matched_data_WHD_wACS, "clean/whd_violations.csv")
 
-## Write two outputs:
-## one with WHD only (matched_data_WHD_wACS)
-## another with that + TRLA outcomes (merge using job_row_id) filtered to the 7 TRLA catchment states 
