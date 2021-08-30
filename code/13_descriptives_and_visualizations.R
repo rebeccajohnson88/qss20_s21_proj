@@ -117,9 +117,9 @@ plot_2_data <- trla_data %>%
 plot_2_data # NA row again!!! 
 
 
-trla_data %>%
-  group_by(year_for_plotting) %>%
-  summarize(n = n()) # other numbers line up so this is sus
+# trla_data %>%
+  # group_by(year_for_plotting) %>%
+  # summarize(n = n()) other numbers line up so this is sus
 
 
 # convert to tall format so we can plot both
@@ -204,9 +204,9 @@ aan = unlist(lapply(general_data$ATTORNEY_AGENT_NAME, clean_names))
 general_data$ATTORNEY_AGENT_NAME_CLEANED <- aan
 
 # in entities investigated
-plot_4_data <- general_data %>%
-  mutate(ATTORNEY_AGENT_NAME_CLEANED = ifelse(ATTORNEY_AGENT_NAME_CLEANED == "", "missing", ATTORNEY_AGENT_NAME_CLEANED)) %>%
-  filter(is_matched_investigations == TRUE)
+general_data <- general_data %>%
+  mutate(ATTORNEY_AGENT_NAME_CLEANED = ifelse(ATTORNEY_AGENT_NAME_CLEANED == "", "missing", ATTORNEY_AGENT_NAME_CLEANED)) # %>%
+  # filter(is_matched_investigations == TRUE)
 
 ############################
 # ADJUST THIS FOR PLOT 4
@@ -214,59 +214,32 @@ plot_4_data <- general_data %>%
 num_unique_employers <- length(unique(general_data$jobs_row_id))
 
 plot_4_data <- plot_4_data %>%
-  group_by(SOC_CODE) %>%
+  group_by(ATTORNEY_AGENT_NAME_CLEANED) %>%
   summarize(distinct_jobs_prop = n_distinct(jobs_row_id) / num_unique_employers)
 
-plot_5_data_filtered <- general_data %>%
+plot_4_data_filtered <- general_data %>%
   filter(is_matched_investigations == TRUE)
 
-num_unique_employers_with_investigations <- length(unique(plot_5_data_filtered$jobs_row_id))
+num_unique_employers_with_investigations <- length(unique(plot_4_data_filtered$jobs_row_id))
 
-plot_5_data_more <- plot_5_data_filtered %>%
-  group_by(SOC_CODE) %>%
+plot_4_data_more <- plot_4_data_filtered %>%
+  group_by(ATTORNEY_AGENT_NAME_CLEANED) %>%
   summarize(distinct_investigations_prop = n_distinct(jobs_row_id) / num_unique_employers_with_investigations)
 
-plot_5_data_final <- merge(plot_5_data, plot_5_data_more, by = "SOC_CODE", all.x = TRUE)
+plot_4_data_final <- merge(plot_4_data, plot_4_data_more, by = "ATTORNEY_AGENT_NAME_CLEANED", all.x = TRUE)
 
-plot_5_data_final <- plot_5_data_final %>%
+plot_4_data_final <- plot_4_data_final %>%
   mutate(plotting_ratio = distinct_jobs_prop / distinct_investigations_prop) %>%
-  filter(SOC_CODE != "")
-############################
-
-# i'm guessing we're supposed to do this but check
-plot_4_data <- plot_4_data %>%
   filter(ATTORNEY_AGENT_NAME_CLEANED != "missing")
 
 # now the plot (investigations)
-plot_4_data %>%
-  ggplot(aes(x = distinct_jobs)) +
+plot_4_data_final %>%
+  ggplot(aes(x = plotting_ratio)) +
   geom_histogram() +
   theme_DOL() +
-  labs(x = "Number of Jobs", y = "Number of Attorney Agents", title = "Representation of Certain Attorney Agents in Investigated Entities")
+  labs(x = "Plotting Ratio", y = "Number of SOC Codes", title = "Representation of SOC Codes for Investigated Entities")
 
-# same plot but for violations instead of investigations
-
-plot_4_and_a_half_data <- general_data %>%
-  mutate(ATTORNEY_AGENT_NAME_CLEANED = ifelse(ATTORNEY_AGENT_NAME_CLEANED == "", "missing", ATTORNEY_AGENT_NAME_CLEANED)) %>%
-  filter(outcome_is_investigation_overlapsd == TRUE)
-
-plot_4_and_a_half_data <- plot_4_and_a_half_data %>%
-  group_by(ATTORNEY_AGENT_NAME_CLEANED) %>%
-  summarize(distinct_jobs = n_distinct(jobs_row_id))
-
-plot_4_and_a_half_data %>%
-  arrange(-distinct_jobs) # again looks like missing is our biggest culprit here
-
-# i'm guessing we're supposed to do this but check
-plot_4_and_a_half_data <- plot_4_and_a_half_data %>%
-  filter(ATTORNEY_AGENT_NAME_CLEANED != "missing")
-
-# now the plot (violations)
-plot_4_and_a_half_data %>%
-  ggplot(aes(x = distinct_jobs)) +
-  geom_histogram() +
-  theme_DOL() +
-  labs(x = "Number of Jobs", y = "Number of Attorney Agents", title = "Representation of Certain Attorney Agents in Entities with Violations")
+# do we need to do this for violations as well?
 
 # plot 5: Overrepresentation of certain SOC codes
 
@@ -291,6 +264,35 @@ plot_5_data_final <- plot_5_data_final %>%
   mutate(plotting_ratio = distinct_jobs_prop / distinct_investigations_prop) %>%
   filter(SOC_CODE != "")
   
+# now the plot (investigations)
+plot_5_data_final %>%
+  ggplot(aes(x = plotting_ratio)) +
+  geom_histogram() +
+  theme_DOL() +
+  labs(x = "Plotting Ratio", y = "Number of SOC Codes", title = "Representation of SOC Codes for Investigated Entities")
+
+# plot 6: Overrepresentation of certain naics codes
+
+num_unique_employers <- length(unique(general_data$jobs_row_id))
+
+plot_6_data <- general_data %>%
+  group_by(naic_cd) %>%
+  summarize(distinct_jobs_prop = n_distinct(jobs_row_id) / num_unique_employers)
+
+plot_6_data_filtered <- general_data %>%
+  filter(is_matched_investigations == TRUE)
+
+num_unique_employers_with_investigations <- length(unique(plot_6_data_filtered$jobs_row_id))
+
+plot_6_data_more <- plot_6_data_filtered %>%
+  group_by(naic_cd) %>%
+  summarize(distinct_investigations_prop = n_distinct(jobs_row_id) / num_unique_employers_with_investigations)
+
+plot_6_data_final <- merge(plot_6_data, plot_6_data_more, by = "naic_cd", all.x = TRUE)
+
+plot_6_data_final <- plot_6_data_final %>%
+  mutate(plotting_ratio = distinct_jobs_prop / distinct_investigations_prop) # %>%
+  # filter out NA?
 
 # now the plot (investigations)
 plot_5_data_final %>%
@@ -299,9 +301,7 @@ plot_5_data_final %>%
   theme_DOL() +
   labs(x = "Plotting Ratio", y = "Number of SOC Codes", title = "Representation of SOC Codes for Investigated Entities")
 
-# is there a blank soc_code that we need to filter out? i think yes
 
-
-# fix plots 4/4.5 to proportions thing
+# NA to filter out- when should I do this?
 
 # shading post covid?
