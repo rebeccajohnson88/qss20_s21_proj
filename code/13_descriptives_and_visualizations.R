@@ -11,10 +11,11 @@ library(dplyr)
 library(lubridate)
 library(reshape2)
 library(RColorBrewer)
+library(here)
 
 RUN_FROM_CONSOLE = FALSE
 if(RUN_FROM_CONSOLE){
-  args <- commandArgs(TRUE)
+ args <- commandArgs(TRUE)
   DATA_DIR = args[1]
 } else{
   DATA_DIR = "~/Dropbox (Dartmouth College)/qss20_finalproj_rawdata/summerwork"
@@ -98,6 +99,8 @@ plot_1_data_tall %>%
   scale_fill_manual(values = our_colors, labels = c("Unique Employers with Jobs", "Unique Employers with WHD Investigations", "Unique Employers with Violations"))
 
 
+ggsave(here("output/figs", "fig_1.pdf"), width = 12, height = 8)
+
 # plot 2: By year or by month-year, plotting the # of unique employers with jobs, # of unique employers with TRLA investigations
 
 # put the relevant date column in a cleaner date format
@@ -131,6 +134,7 @@ plot_2_data_tall %>%
   labs(x = "Year", y = "Number of Empoyers", fill = "") +
   scale_fill_manual(values = c(our_colors[1], our_colors[2]), labels = c("Unique Employers with Jobs", "Unique Employers with TRLA Investigations"))
 
+ggsave(here("output/figs", "fig_2.pdf"), width = 12, height = 8)
 
 # plot 3: Something with overlap of those two
 plot_3_data <- trla_data %>%
@@ -150,6 +154,8 @@ plot_3_data_tall %>%
   theme_DOL() +
   labs(x = "Year", y = "Number of Empoyers", fill = "", title = "Employer Type Each Year (TRLA States)") +
   scale_fill_manual(values = c("#D95F02", "#66A61E", "#E6AB02", "#A6761D"), labels = c("Unique Employers with No Investigations", "Unique Employers with WHD Investigations", "Unique Employers with TRLA Investigations", "Unique Employers with both WHD and TRLA Investigations"))
+
+ggsave(here("output/figs", "fig_3.pdf"), width = 12, height = 8)
 
 # plot 3.5 for proportions instead of counts
 plot_3_and_a_half_data <- trla_data %>%
@@ -179,6 +185,8 @@ plot_3_and_a_half_data_tall %>%
   theme_DOL() +
   labs(x = "Year", y = "Proportion of Empoyers", fill = "Type of Employer", title = "Employer Type Each Year (TRLA States)") +
   scale_fill_manual(values = c("#D95F02", "#66A61E", "#E6AB02", "#A6761D"), labels = c("Unique Employers with No Investigations", "Unique Employers with WHD Investigations", "Unique Employers with TRLA Investigations", "Unique Employers with both WHD and TRLA Investigations"))
+
+ggsave(here("output/figs", "fig_4.pdf"), width = 12, height = 8)
 
 
 # plot 4: Overrepresentation of certain attorney agents in entities investigated or with violations
@@ -230,6 +238,8 @@ plot_4_data_final %>%
   theme_DOL() +
   labs(x = "Plotting Ratio", y = "Number of Attorney Agents", title = "Overrepresentation of Attorney Agents for Investigated Entities")
 
+ggsave(here("output/figs", "fig_5.pdf"), width = 12, height = 8)
+
 # For violations
 plot_4_data_filtered_again <- general_data %>%
   filter(outcome_is_investigation_overlapsd == TRUE)
@@ -253,6 +263,7 @@ plot_4_data_final_plot2 %>%
   theme_DOL() +
   labs(x = "Plotting Ratio 2", y = "Number of Attorney Agents", title = "Overrepresentation of Attorney Agents for Entities with WHD Violations")
 
+ggsave(here("output/figs", "fig_6.pdf"), width = 12, height = 8)
 
 # plot 5: Overrepresentation of certain SOC codes
 
@@ -276,13 +287,15 @@ plot_5_data_final <- merge(plot_5_data, plot_5_data_more, by = "SOC_CODE", all.x
 plot_5_data_final <- plot_5_data_final %>%
   mutate(plotting_ratio = distinct_investigations_prop / distinct_jobs_prop) %>%
   filter(SOC_CODE != "")
-  
+
 # now the plot (investigations)
 plot_5_data_final %>%
   ggplot(aes(x = plotting_ratio)) +
   geom_histogram() +
   theme_DOL() +
   labs(x = "Plotting Ratio", y = "Number of SOC Codes", title = "Overrepresentation of SOC Codes for Investigated Entities")
+
+ggsave(here("output/figs", "fig_7.pdf"), width = 12, height = 8)
 
 # For violations
 plot_5_data_filtered_again <- general_data %>%
@@ -306,6 +319,8 @@ plot_5_data_final_plot2 %>%
   geom_histogram() +
   theme_DOL() +
   labs(x = "Plotting Ratio 2", y = "Number of SOC Codes", title = "Overrepresentation of SOC Codes for Entities with WHD Violations")
+
+ggsave(here("output/figs", "fig_8.pdf"), width = 12, height = 8)
 
 # plot 6: Overrepresentation of certain naics codes
 
@@ -338,6 +353,8 @@ plot_6_data_final %>%
 
 # weird that these are all the same...
 
+ggsave(here("output/figs", "fig_9.pdf"), width = 12, height = 8)
+
 # For violations
 plot_6_data_filtered_again <- general_data %>%
   filter(outcome_is_investigation_overlapsd == TRUE)
@@ -360,6 +377,6 @@ plot_6_data_final_plot2 %>%
   theme_DOL() +
   labs(x = "Plotting Ratio 2", y = "Number of NAICS Codes", title = "Overrepresentation of NAICS Codes for Entities with WHD Violations")
 
-# figure out ggsave
+ggsave(here("output/figs", "fig_10.pdf"), width = 12, height = 8)
 
 # shading post covid?
