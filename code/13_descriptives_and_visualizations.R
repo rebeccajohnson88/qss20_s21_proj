@@ -27,16 +27,17 @@ setwd(DATA_DIR)
 # Loading in Data
 #####################
 
-# fuzzy matched data with whd and trla outcomes
-merged_data <- readRDS("intermediate/whd_violations_wTRLA_catchmentonly.RDS")
+# trla_file
+trla_data <- readRDS("clean/whd_violations_wTRLA_catchmentonly.RDS")
+
+# general file
+general_data <- readRDS("clean/whd_violations.RDS")
 
 ###################
 # Visualizations
 ###################
 
 # custom theme
-base_size = 24
-
 theme_DOL <- function(base_size = 24){
   theme_bw(base_size = base_size) %+replace%
     theme(
@@ -63,19 +64,24 @@ our_colors = c("#1B9E77", "#E6AB02", "#7570B3")
 # visualization 1: By year or by month-year, plotting the # of unique employers with jobs, # of unique employers with WHD investigations, # of unique employers with violations (using the overlap version of the outcome)
 
 # put the relevant date column in a cleaner date format
-merged_data <- merged_data %>%
+general_data <- general_data %>%
   mutate(REQUESTED_START_DATE_OF_NEED = ymd_hms(REQUESTED_START_DATE_OF_NEED))
 
 # extract the year for plotting
-merged_data <- merged_data %>%
+general_data <- general_data %>%
   mutate(year_for_plotting = as.factor(year(REQUESTED_START_DATE_OF_NEED)))
 
+# check and make sure the years look correct
+table(general_data$year_for_plotting) # no NA's here
+
 # get the summary statistics desired
-plot_1_data <- merged_data %>%
+plot_1_data <- general_data %>%
   group_by(year_for_plotting) %>%
   summarize(unique_employers = n_distinct(jobs_row_id),
             unique_employers_with_investigations = n_distinct(jobs_row_id[is_matched_investigations == TRUE]),
             unique_employers_with_violations = n_distinct(jobs_row_id[outcome_is_investigation_overlapsd == TRUE]))
+
+plot_1_data # where is this NA row coming from!
 
 # convert to tall format so we can plot all 3
 plot_1_data_tall <- melt(plot_1_data, id.vars = "year_for_plotting")
@@ -92,10 +98,29 @@ plot_1_data_tall %>%
 
 
 # plot 2: By year or by month-year, plotting the # of unique employers with jobs, # of unique employers with TRLA investigations
-plot_2_data <- merged_data %>%
+
+# put the relevant date column in a cleaner date format
+trla_data <- trla_data %>%
+  mutate(REQUESTED_START_DATE_OF_NEED = ymd_hms(REQUESTED_START_DATE_OF_NEED))
+
+# extract the year for plotting
+trla_data <- trla_data %>%
+  mutate(year_for_plotting = as.factor(year(REQUESTED_START_DATE_OF_NEED)))
+
+table(trla_data$year_for_plotting)
+
+plot_2_data <- trla_data %>%
   group_by(year_for_plotting) %>%
   summarize(unique_employers = n_distinct(jobs_row_id),
             unique_employers_with_trla_investigations = n_distinct(jobs_row_id[outcome_is_investigation_overlapsd_trla == TRUE]))
+
+plot_2_data # NA row again!!! 
+
+
+trla_data %>%
+  group_by(year_for_plotting) %>%
+  summarize(n = n()) # other numbers line up so this is sus
+
 
 # convert to tall format so we can plot both
 plot_2_data_tall <- melt(plot_2_data, id.vars = "year_for_plotting")
@@ -110,9 +135,9 @@ plot_2_data_tall %>%
 
 
 # plot 3: Something with overlap of those two
-plot_3_data <- merged_data %>%
+plot_3_data <- trla_data %>%
   group_by(year_for_plotting) %>%
-  summarize(unique_employers = n_distinct(jobs_row_id[outcome_compare_TRLA_WHD == "Neither WHD nor TRLA"]),
+  summarize(unique_employers_without_investigations = n_distinct(jobs_row_id[outcome_compare_TRLA_WHD == "Neither WHD nor TRLA"]),
             unique_employers_with_whd_investigations = n_distinct(jobs_row_id[outcome_compare_TRLA_WHD == "WHD; not TRLA"]),
             unique_employers_with_trla_investigations = n_distinct(jobs_row_id[outcome_compare_TRLA_WHD == "TRLA; not WHD"]),
             unique_employers_with_both_investigations = n_distinct(jobs_row_id[outcome_compare_TRLA_WHD == "Both TRLA and WHD"]))
@@ -123,6 +148,160 @@ plot_3_data_tall <- melt(plot_3_data, id.vars = "year_for_plotting")
 brewer.pal(8, "Dark2")
 display.brewer.pal(8, "Dark2")
 
+# now the plot
+plot_3_data_tall %>%
+  ggplot(aes(x = year_for_plotting, y = value, fill = variable)) +
+  geom_col(position = "dodge") +
+  theme_DOL() +
+  labs(x = "Year", y = "Number of Empoyers", fill = "Type of Employer", title = "Employer Type Each Year (TRLA States)") +
+  scale_fill_manual(values = c("#D95F02", "#66A61E", "#E6AB02", "#A6761D"), labels = c("Unique Employers with No Investigations", "Unique Employers with WHD Investigations", "Unique Employers with TRLA Investigations", "Unique Employers with both WHD and TRLA Investigations"))
 
-# shading post covid
+# plot 3.5 for proportions instead of counts
+plot_3_and_a_half_data <- trla_data %>%
+  group_by(year_for_plotting) %>%
+  summarize(unique_employers = n_distinct(jobs_row_id),
+            unique_employers_without_investigations = n_distinct(jobs_row_id[outcome_compare_TRLA_WHD == "Neither WHD nor TRLA"]),
+            unique_employers_with_whd_investigations = n_distinct(jobs_row_id[outcome_compare_TRLA_WHD == "WHD; not TRLA"]),
+            unique_employers_with_trla_investigations = n_distinct(jobs_row_id[outcome_compare_TRLA_WHD == "TRLA; not WHD"]),
+            unique_employers_with_both_investigations = n_distinct(jobs_row_id[outcome_compare_TRLA_WHD == "Both TRLA and WHD"]))
 
+plot_3_and_a_half_data <- plot_3_and_a_half_data %>%
+  mutate(unique_employers_without_investigations = unique_employers_without_investigations / unique_employers,
+         unique_employers_with_whd_investigations = unique_employers_with_whd_investigations / unique_employers,
+         unique_employers_with_trla_investigations = unique_employers_with_trla_investigations / unique_employers,
+         unique_employers_with_both_investigations = unique_employers_with_both_investigations / unique_employers)
+
+
+plot_3_and_a_half_data = subset(plot_3_and_a_half_data, select = -unique_employers)
+
+
+plot_3_and_a_half_data_tall<- melt(plot_3_and_a_half_data, id.vars = "year_for_plotting")
+
+# now the plot
+plot_3_and_a_half_data_tall %>%
+  ggplot(aes(x = year_for_plotting, y = value, fill = variable)) +
+  geom_col(position = "dodge") +
+  theme_DOL() +
+  labs(x = "Year", y = "Proportion of Empoyers", fill = "Type of Employer", title = "Employer Type Each Year (TRLA States)") +
+  scale_fill_manual(values = c("#D95F02", "#66A61E", "#E6AB02", "#A6761D"), labels = c("Unique Employers with No Investigations", "Unique Employers with WHD Investigations", "Unique Employers with TRLA Investigations", "Unique Employers with both WHD and TRLA Investigations"))
+
+
+# plot 4: Overrepresentation of certain attorney agents in entities investigated or with violations
+
+# function to clean the EMPLOYER_NAME in approved_only (h2a apps) and legal_name in violations (WHD data)
+clean_names <- function(one){
+  
+  string_version = toString(one) # convert to string
+  no_white_space = trimws(string_version) # remove leading and trailing whitespace
+  upper_only <- toupper(no_white_space) # convert to uppercase
+  res <- gsub("\\s+", " ", upper_only)
+  return(res)
+  
+}
+
+# make new "name" columns for the cleaned versions of the names
+aan = unlist(lapply(general_data$ATTORNEY_AGENT_NAME, clean_names))
+general_data$ATTORNEY_AGENT_NAME_CLEANED <- aan
+
+# in entities investigated
+plot_4_data <- general_data %>%
+  mutate(ATTORNEY_AGENT_NAME_CLEANED = ifelse(ATTORNEY_AGENT_NAME_CLEANED == "", "missing", ATTORNEY_AGENT_NAME_CLEANED)) %>%
+  filter(is_matched_investigations == TRUE)
+
+############################
+# ADJUST THIS FOR PLOT 4
+
+num_unique_employers <- length(unique(general_data$jobs_row_id))
+
+plot_4_data <- plot_4_data %>%
+  group_by(SOC_CODE) %>%
+  summarize(distinct_jobs_prop = n_distinct(jobs_row_id) / num_unique_employers)
+
+plot_5_data_filtered <- general_data %>%
+  filter(is_matched_investigations == TRUE)
+
+num_unique_employers_with_investigations <- length(unique(plot_5_data_filtered$jobs_row_id))
+
+plot_5_data_more <- plot_5_data_filtered %>%
+  group_by(SOC_CODE) %>%
+  summarize(distinct_investigations_prop = n_distinct(jobs_row_id) / num_unique_employers_with_investigations)
+
+plot_5_data_final <- merge(plot_5_data, plot_5_data_more, by = "SOC_CODE", all.x = TRUE)
+
+plot_5_data_final <- plot_5_data_final %>%
+  mutate(plotting_ratio = distinct_jobs_prop / distinct_investigations_prop) %>%
+  filter(SOC_CODE != "")
+############################
+
+# i'm guessing we're supposed to do this but check
+plot_4_data <- plot_4_data %>%
+  filter(ATTORNEY_AGENT_NAME_CLEANED != "missing")
+
+# now the plot (investigations)
+plot_4_data %>%
+  ggplot(aes(x = distinct_jobs)) +
+  geom_histogram() +
+  theme_DOL() +
+  labs(x = "Number of Jobs", y = "Number of Attorney Agents", title = "Representation of Certain Attorney Agents in Investigated Entities")
+
+# same plot but for violations instead of investigations
+
+plot_4_and_a_half_data <- general_data %>%
+  mutate(ATTORNEY_AGENT_NAME_CLEANED = ifelse(ATTORNEY_AGENT_NAME_CLEANED == "", "missing", ATTORNEY_AGENT_NAME_CLEANED)) %>%
+  filter(outcome_is_investigation_overlapsd == TRUE)
+
+plot_4_and_a_half_data <- plot_4_and_a_half_data %>%
+  group_by(ATTORNEY_AGENT_NAME_CLEANED) %>%
+  summarize(distinct_jobs = n_distinct(jobs_row_id))
+
+plot_4_and_a_half_data %>%
+  arrange(-distinct_jobs) # again looks like missing is our biggest culprit here
+
+# i'm guessing we're supposed to do this but check
+plot_4_and_a_half_data <- plot_4_and_a_half_data %>%
+  filter(ATTORNEY_AGENT_NAME_CLEANED != "missing")
+
+# now the plot (violations)
+plot_4_and_a_half_data %>%
+  ggplot(aes(x = distinct_jobs)) +
+  geom_histogram() +
+  theme_DOL() +
+  labs(x = "Number of Jobs", y = "Number of Attorney Agents", title = "Representation of Certain Attorney Agents in Entities with Violations")
+
+# plot 5: Overrepresentation of certain SOC codes
+
+num_unique_employers <- length(unique(general_data$jobs_row_id))
+
+plot_5_data <- general_data %>%
+  group_by(SOC_CODE) %>%
+  summarize(distinct_jobs_prop = n_distinct(jobs_row_id) / num_unique_employers)
+
+plot_5_data_filtered <- general_data %>%
+  filter(is_matched_investigations == TRUE)
+
+num_unique_employers_with_investigations <- length(unique(plot_5_data_filtered$jobs_row_id))
+
+plot_5_data_more <- plot_5_data_filtered %>%
+  group_by(SOC_CODE) %>%
+  summarize(distinct_investigations_prop = n_distinct(jobs_row_id) / num_unique_employers_with_investigations)
+
+plot_5_data_final <- merge(plot_5_data, plot_5_data_more, by = "SOC_CODE", all.x = TRUE)
+
+plot_5_data_final <- plot_5_data_final %>%
+  mutate(plotting_ratio = distinct_jobs_prop / distinct_investigations_prop) %>%
+  filter(SOC_CODE != "")
+  
+
+# now the plot (investigations)
+plot_5_data_final %>%
+  ggplot(aes(x = plotting_ratio)) +
+  geom_histogram() +
+  theme_DOL() +
+  labs(x = "Plotting Ratio", y = "Number of SOC Codes", title = "Representation of SOC Codes for Investigated Entities")
+
+# is there a blank soc_code that we need to filter out? i think yes
+
+
+# fix plots 4/4.5 to proportions thing
+
+# shading post covid?
