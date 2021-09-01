@@ -125,4 +125,3 @@ display.brewer.pal(8, "Dark2")
 
 
 # shading post covid?
-
