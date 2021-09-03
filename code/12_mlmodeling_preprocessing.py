@@ -1,10 +1,9 @@
-# Machine Learning Modeling of final dataset
-# Aug 26, 2021
-# Grant Anapolle and Yuchuan Ma
+#!/usr/bin/env python
+# coding: utf-8
 
-##### imports
-import re
-import time
+# In[1]:
+
+
 import numpy as np
 import pandas as pd
 import os
@@ -25,26 +24,32 @@ from sklearn.svm import SVC
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.model_selection import GroupShuffleSplit
 
-##### Input Path
+#file paths
 DROPBOX_INT_PATH = '../../qss20_finalproj_rawdata/summerwork/'
 TRLA_DATA_FILE_NAME = "clean/whd_violations_wTRLA_catchmentonly.csv"
 GENERAL_DATA_FILE_NAME = "clean/whd_violations.csv"
 TRLA_DATA_FILE_PATH = os.path.join(DROPBOX_INT_PATH, TRLA_DATA_FILE_NAME)
 GENERAL_DATA_FILE_PATH = os.path.join(DROPBOX_INT_PATH, GENERAL_DATA_FILE_NAME)
 
-# local path for now
-TRLA_DATA_FILE_PATH2 = "/Users/euniceliu/Dropbox (Dartmouth College)/qss20_finalproj_rawdata/summerwork/clean/whd_violations_wTRLA_catchmentonly.csv"
-GENERAL_DATA_FILE_PATH2 = "/Users/euniceliu/Dropbox (Dartmouth College)/qss20_finalproj_rawdata/summerwork/clean/whd_violations.csv"
+### local path for now
+TRLA_DATA_WOUTCOMES = "/Users/grantanapolle/Dropbox/qss20_finalproj_rawdata/summerwork/clean/whd_violations_wTRLA_catchmentonly.csv"
+WHD_DATA_WOUTCOMES = "/Users/grantanapolle/Dropbox/qss20_finalproj_rawdata/summerwork/clean/whd_violations.csv"
+H2A_FEATURES = "/Users/grantanapolle/Dropbox/qss20_finalproj_rawdata/summerwork/intermediate/h2a_combined_2014-2021.pkl"
+
+
+# In[2]:
+
 
 #### functions
 
 def get_ordinal(df, col):
     '''function that turns a col into datetime then ordinal timestamp, old input col will be replaced '''
     df[col] = pd.to_datetime(df[col],errors='coerce')
-    df[col] = np.where(df[col].isna, pd.to_datetime('1/1/1'), df[col])
+    df[col] = np.where(df[col].isna, df[col].mode(), df[col]) # change na to mode
     df[col] = [pd.Timestamp(date) for date in df[col]]
     df[col] = [tstamp.toordinal() for tstamp in df[col]]
-    return df
+    return df[col]
+
 
 def gen_topk_dummies(df, feature, percentThreshold):
     '''
@@ -73,119 +78,154 @@ def gen_topk_dummies(df, feature, percentThreshold):
     print(f"{feature}'s val count was "+ str(df[feature].nunique()) + ", count now:" + str(df_dummies[feature].nunique()))
     return(df_dummies)
 
-def gen_dum_categorical(df, feature):
+
+def process_data(df, outcomes):
+    
+    x = df[features_list]
+    y = df[outcomes]
+    
+    for col in ['JOB_START_DATE', 'REQUESTED_START_DATE_OF_NEED', 'JOB_END_DATE', 'REQUESTED_END_DATE_OF_NEED']:
+        x[col] = get_ordinal(x, col)
+        
+    ## change some row values to dummy "others" according to value count of the column
+    for col in ['ATTORNEY_AGENT_CITY', 'JOB_TITLE', 'ATTORNEY_AGENT_NAME','WORKSITE_CITY', 'EMPLOYER_CITY']:
+        x = gen_topk_dummies(x, col, 0.01)
+    
+    ##### do a train test split
+    # split into train and test sets (80/20) -> returns index of the split, not the split df itself
+    # group shuffle split on job group id: 'jobs_group_id'
+    gs = GroupShuffleSplit(n_splits=2, train_size=.7, random_state=42)
+    train_ix, test_ix = next(gs.split(x, y, groups=x.jobs_group_id))
+    
+    # now actually split the df before imputation
+    x_train = x.loc[train_ix]
+    x_test = x.loc[test_ix]
+    
+    # imputation
+    x_train_imputed, cat_cols_train = imputation(x_train)
+    x_test_imputed, cat_cols_test = imputation(x_test)
+    
+    
+    # categorical dummies
+    x_train_imputed_dummies = gen_dum_categorical(x_train_imputed, cat_cols_train)
+    x_test_imputed_dummies = gen_dum_categorical(x_test_imputed, cat_cols_test)
+    
+    print(x_train_imputed_dummies.shape, x_test_imputed_dummies.shape)
+    
+    train_processed = pd.merge(x_train_imputed_dummies.reset_index(), y.loc[train_ix].reset_index(), 
+                               how = 'left', on = 'index')
+    train_processed = train_processed.drop(columns = 'index')
+    
+    test_processed = pd.merge(x_test_imputed_dummies.reset_index(), y.loc[test_ix].reset_index(), 
+                              how = 'left', on = 'index')
+    test_processed = test_processed.drop(columns = 'index')
+    
+    print(train_processed.shape, test_processed.shape)
+
+        
+    return train_processed, test_processed
+
+
+def imputation(df):
+    
+    # seperate into numeric can categorical columns
+    numeric_options = ["int64", "float64"]
+    num_cols = [one for one in df.columns if df.dtypes[one] in numeric_options] # all nums are actually dates
+    cat_cols = [one for one in df.columns if df.dtypes[one] not in numeric_options]
+    print('number of numeric colums: ', len(num_cols))
+    print('number of categorical colums: ', len(cat_cols))
+    
+    cat_df = df[cat_cols]
+    num_df = df[num_cols]
+    
+    # SimpleImputer on the categorical features and apply a "missing_value" to NANs
+    imputer_cat = SimpleImputer(strategy='constant', fill_value='missing_value')
+    cat_df_imputed = pd.DataFrame(imputer_cat.fit_transform(cat_df))
+    cat_df_imputed.columns = cat_df.columns
+
+    # SimpleImputer on the date features and apply mode to NANs
+    imputer_num = SimpleImputer(strategy='most_frequent', verbose=5)
+    num_df_imputed = pd.DataFrame(imputer_num.fit_transform(num_df))
+    num_df_imputed.columns = num_df.columns
+    
+    # merge the imputed num/cat dfs back
+    imputed_combined = pd.merge(cat_df_imputed.reset_index(),
+                                num_df_imputed.reset_index(), 
+                                how='left', on='index')
+    
+    print('%s rows lost in merge' %(num_df_imputed.shape[0]-imputed_combined.shape[0]))
+    imputed_combined = imputed_combined.drop(columns = 'index')
+    print(imputed_combined.shape)
+    
+    return imputed_combined, cat_cols
+
+
+def gen_dum_categorical(df, features):
     '''gen dummies columns for categorical variable'''
-    for f in feature:
+    for f in features:
         dummies = pd.get_dummies(df[f], prefix=df[f].name)
         df.drop(columns=[f], inplace=True)
         df = df.join(dummies)
     return df
+    
 
 
-#### Read in and investigate data
-pre_df = pd.read_csv(TRLA_DATA_FILE_PATH2)
-pre_df = pre_df.reset_index().copy()
-
-# read in h2a jobs data for filtering job feature using h2a df's column names
-h2a_data = pd.read_csv(GENERAL_DATA_FILE_PATH2)
-# with open(GENERAL_DATA_FILE_PATH2, "rb") as df:
-#   h2a_data = pickle.load(df)
-job_feature = h2a_data.columns.tolist()
-job_feature.append("jobs_group_id")
-
-print(pre_df.info(verbose=True, show_counts=True))
-#print(h2a_data.columns.values)
-
-## Assign outcome boolean vars to y (value we are trying to predict)
-outcome_cols = [col for col in pre_df.columns if 'outcome_' in col]
-test_outcome = ['is_matched_investigations','outcome_is_investigation_overlapsd']
-print("Outcome variables to predict are:" + str(outcome_cols))
-y1 = pre_df[test_outcome[0]]
-
-# remove them from the preMatrix ... because that would be too easy!
-pre_df = pre_df.drop(columns=outcome_cols, axis=1)
-
-## select columns that overlap with job_feature (col names from H2A_DATA)
-cols = [c for c in pre_df.columns if c in job_feature]
-preMatrix = pre_df[cols].copy()
-
-## convert the dates to ordinal timestamps
-for col in ['JOB_END_DATE','JOB_START_DATE']:
-    get_ordinal(preMatrix, col)
-
-print("shape after slicing out outcome cols and selecting feature cols:")
-print(preMatrix.shape)
-print(preMatrix.nunique(axis=0))
-#print(preMatrix.info(verbose=True, show_counts=True))
+# In[3]:
 
 
-##### seperate num/cat feature columns
-
-numeric_options = ["int64", "float64", "datetime64[ns]"]
-num_cols = [one for one in preMatrix.columns if preMatrix.dtypes[one] in numeric_options] # all nums are actually dates
-cat_cols = [one for one in preMatrix.columns if preMatrix.dtypes[one] not in numeric_options]
-
-## select cat columns with less than 1000 unique values
-# choosing columns w/ nrow/2 unique values
-selected_cat_large = [c for c in cat_cols if preMatrix[c].nunique()<=1000]
-
-print('Numeric Columns:')
-print(num_cols)
-print('\nSelected Categorical Columns:')
-print(selected_cat_large)
+trla_df_pre = pd.read_csv(TRLA_DATA_WOUTCOMES)
+whd_df_pre = pd.read_csv(WHD_DATA_WOUTCOMES)
 
 
-## change some row values to dummy "others" according to value count of the column
-for col in ['ATTORNEY_AGENT_CITY','ATTORNEY_AGENT_NAME','WORKSITE_CITY']:
-    preMatrix = gen_topk_dummies(preMatrix,col,0.01)
-
-##### do a train test split
-# split into train and test sets (80/20) -> returns index of the split, not the split df itself
-# group shuffle split on job group id: 'jobs_group_id'
-gs = GroupShuffleSplit(n_splits=2, train_size=.7, random_state=42)
-train_ix, test_ix = next(gs.split(preMatrix, y1, groups=preMatrix.jobs_group_id))
+# In[4]:
 
 
-#### data imputation
-# get the categorical features in one dataframe
-cat_feature_pre = preMatrix.loc[:, selected_cat_large].copy()
-print("Shape of non-imputed: ")
-print(cat_feature_pre.shape)
-# and the numerical features into another dataframe
-date_feature_pre = preMatrix.loc[:, num_cols].copy()
-print(date_feature_pre.shape)
-
-# SimpleImputer on the categorical features and apply a "missing_value" to NANs
-imputer_cat = SimpleImputer(strategy='constant', fill_value='missing_value')
-imputed_cat_feature_pre = pd.DataFrame(imputer_cat.fit_transform(cat_feature_pre))
-imputed_cat_feature_pre.columns = cat_feature_pre.columns
-
-# SimpleImputer on the date features and apply mode to NANs
-imputer_date = SimpleImputer(strategy='most_frequent', verbose=5)
-imputed_date_feature_pre = pd.DataFrame(imputer_date.fit_transform(date_feature_pre))
-imputed_date_feature_pre.columns = date_feature_pre.columns
-
-print("Shape of imputed: ")
-print(imputed_cat_feature_pre.shape)
-print(imputed_date_feature_pre.shape)
-# merge the imputed num/cat dfs back
-imputed_combined = pd.merge(imputed_cat_feature_pre.reset_index(),
-                            imputed_date_feature_pre.reset_index(), how='left',
-                            on='index')
-print('%s rows lost in merge' %(imputed_date_feature_pre.shape[0]-imputed_combined.shape[0]))
-print(imputed_combined.shape)
-imputed_combined = imputed_combined.drop(columns = 'index')
-
-imputed_dummy_df = gen_dum_categorical(imputed_combined, selected_cat_large)
-print('shape after generating dummies for categorical var: ')
-print(imputed_dummy_df.shape)
-print(imputed_dummy_df.head)
+#read in features then manually decide which to keep based on nunique()
+features_df = pd.read_pickle(H2A_FEATURES)
+features_columns = features_df.columns.tolist()
+print(whd_df_pre[features_columns].nunique())
 
 
-# split out x and y test/train df according to the previous split index
-X_train = imputed_dummy_df.loc[train_ix]
-y_train = y1.loc[train_ix]
+# In[5]:
 
-X_test = imputed_dummy_df.loc[test_ix]
-y_test = y1.loc[test_ix]
+
+features_list = ['ATTORNEY_AGENT_CITY', 'JOB_TITLE', 'EMPLOYER_STATE', 'SOC_CODE', 'REQUESTED_END_DATE_OF_NEED', 
+                 'SOC_TITLE', 'EMPLOYER_CITY', 'JOB_END_DATE', 'ATTORNEY_AGENT_STATE', 'JOB_START_DATE', 'REQUESTED_START_DATE_OF_NEED',
+                 'WORKSITE_STATE', 'ATTORNEY_AGENT_NAME', 'WORKSITE_CITY', 'jobs_group_id', 'jobs_row_id']
+
+print(whd_df_pre[features_list].nunique())
+
+
+# In[6]:
+
+
+print('length of features before acs: ', len(features_list))
+
+acs_cols = [col for col in trla_df_pre if 'acs_' in col]
+features_list += acs_cols
+
+print('length of features after adding acs: ', len(features_list))
+
+whd_outcomes = ['outcome_is_investigation_overlapsd', 'outcome_is_viol_overlapsd']
+
+trla_outcome_dummies = pd.get_dummies(trla_df_pre['outcome_compare_TRLA_WHD'])
+trla_df_pre = trla_df_pre.join(trla_outcome_dummies)
+trla_outcomes = trla_outcome_dummies.columns.tolist()
+
+
+# In[7]:
+
+
+whd_train_processed, whd_test_processed = process_data(whd_df_pre, whd_outcomes)
+
+trla_train_processed, trla_test_processed = process_data(trla_df_pre, trla_outcomes)
+
+
+# In[8]:
+
+
+whd_train_processed.to_pickle('../../qss20_finalproj_rawdata/summerwork/clean/whd_training.pkl')
+whd_test_processed.to_pickle('../../qss20_finalproj_rawdata/summerwork/clean/whd_testing.pkl')
+trla_train_processed.to_pickle('../../qss20_finalproj_rawdata/summerwork/clean/trla_training.pkl')
+trla_test_processed.to_pickle('../../qss20_finalproj_rawdata/summerwork/clean/trla_testing.pkl')
 
