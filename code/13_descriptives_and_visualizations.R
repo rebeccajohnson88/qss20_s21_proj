@@ -72,6 +72,10 @@ color_guide = c("jobs" = "#1B9E77",
 
 # put the relevant date column in a cleaner date format
 
+##########################
+# Clean year and attorney agent for WHD data
+##########################
+
 general_data <- general_data %>%
   mutate(JOB_START_DATE = ymd(JOB_START_DATE))
 
@@ -85,6 +89,10 @@ general_data <- general_data %>%
 
 general_data <- general_data %>%
   mutate(year_for_plotting = as.factor(year_for_plotting))
+
+##########################
+# Over-time plots
+##########################
 
 # get the summary statistics desired
 n_by_year <- general_data %>%
@@ -141,6 +149,11 @@ ggsave(here("output/figs", "barplot_unique_jobs_by_year.pdf"),
        width = 12, height = 8)
 
 # plot 2: By year or by month-year, plotting the # of unique employers with jobs, # of unique employers with TRLA investigations
+
+##########################
+# Over-time plots TRLA
+##########################
+
 
 # put the relevant date column in a cleaner date format
 trla_data <- trla_data %>%
@@ -241,7 +254,14 @@ trla_v_WHD_plot_long %>%
 ggsave(here("output/figs", "trla_v_whd_prop.pdf"), width = 12, height = 8)
 
 
-# plot 4: Overrepresentation of certain attorney agents in entities investigated or with violations
+##########################
+# To add: zoom in on 2020 pre and post covid
+##########################
+
+
+##########################
+# Over-rep in those investigated: attorney agents
+##########################
 
 # function to clean the EMPLOYER_NAME in approved_only (h2a apps) and legal_name in violations (WHD data)
 clean_names <- function(one){
@@ -351,7 +371,7 @@ attorney_rep_top_trla %>%
              fill = which_rate)) +
   geom_col(position = "dodge", color = "black") +
   theme_DOL() +
-  labs(x = "Attorney/agent on application", y = "Percent of their employers\nwith investigation\n(TRLA catchment states only)") +
+  labs(x = "Attorney/agent on application", y = "Percent of employers they represent\nwith investigation\n(TRLA catchment states only)") +
   coord_flip() +
   scale_fill_manual(values = c(as.character(color_guide["WHD investigations"]), 
                               color_guide["TRLA intake"]),
@@ -363,34 +383,61 @@ attorney_rep_top_trla %>%
 
 ggsave(here("output/figs", "attorney_highriskWHD_trlastates.pdf"), width = 12, height = 8)
 
-# For violations
-plot_4_data_filtered_again <- general_data %>%
-  filter(outcome_is_investigation_overlapsd == TRUE)
-
-num_unique_employers_with_violations <- length(unique(plot_4_data_filtered_again$jobs_row_id))
-
-plot_4_data_third <- plot_4_data_filtered_again %>%
+# Look at employers with high rates of violations conditional on an investigation
+# but only within TRLA states
+attorney_highrate_viol = trla_data %>%
+  filter(outcome_is_investigation_overlapsd) %>%
   group_by(ATTORNEY_AGENT_NAME_CLEANED) %>%
-  summarize(distinct_violations_prop = n_distinct(jobs_row_id) / num_unique_employers_with_violations)
-
-plot_4_data_final_plot2 <- merge(plot_4_data_more, plot_4_data_third, by = "ATTORNEY_AGENT_NAME_CLEANED", all.x = TRUE)
-
-plot_4_data_final_plot2 <- plot_4_data_final_plot2 %>%
-  mutate(plotting_ratio_2 = distinct_violations_prop / distinct_investigations_prop) %>%
-  filter(ATTORNEY_AGENT_NAME_CLEANED != "missing")
-
-# now the plot (violations)
-plot_4_data_final_plot2 %>%
-  ggplot(aes(x = plotting_ratio_2)) +
-  geom_histogram() +
+  summarise(n_investigated = n_distinct(jobs_group_id)) %>%
+  ungroup() %>%
+  left_join(trla_data %>%
+              filter(outcome_is_viol_overlapsd) %>%
+              group_by(ATTORNEY_AGENT_NAME_CLEANED) %>%
+              summarise(n_violations = n_distinct(jobs_group_id)) %>%
+              ungroup()) %>% 
+  left_join(trla_data %>% 
+              filter(outcome_is_investigation_overlapsd_trla) %>%
+              group_by(ATTORNEY_AGENT_NAME_CLEANED) %>%
+              summarise(n_investigated_trla = n_distinct(jobs_group_id)) %>%
+              ungroup()) %>%
+  mutate(perc_investigations_viol = ifelse(is.na(n_violations), 0,
+                                           n_violations/n_investigated),
+         trla_intake_call = ifelse(is.na(n_investigated_trla), FALSE,
+                                   TRUE)) %>%
+  arrange(desc(perc_investigations_viol))
+  
+attorney_highrate_viol %>%
+  filter(n_investigated >= 2 & ATTORNEY_AGENT_NAME_CLEANED != "Missing") %>%
+  ggplot(aes(x = reorder(ATTORNEY_AGENT_NAME_CLEANED,
+                         perc_investigations_viol), y = perc_investigations_viol*100, 
+             fill = trla_intake_call)) +
+  geom_col(position = "dodge", color = "black") +
   theme_DOL() +
-  labs(x = "Plotting Ratio 2", y = "Number of Attorney Agents", title = "Overrepresentation of Attorney Agents for Entities with WHD Violations")
+  labs(x = "Attorney/agent on application", y = "Of employers investigated,\n% with 1+ WHD-found violation") +
+  coord_flip() +
+  scale_fill_manual(values = c("wheat4", 
+                               color_guide["TRLA intake"]),
+                    labels = c("None",
+                               "1+")) +
+  theme(axis.text.y = element_text(size = 12),
+        legend.position = c(0.9, 0.1)) +
+  labs(fill = "TRLA intakes?")  
 
-ggsave(here("output/figs", "fig_6.pdf"), width = 12, height = 8)
+ggsave(here("output/figs", "attorney_highviol_TRLAstates.pdf"), width = 12, height = 8)
 
-# plot 5: Overrepresentation of certain SOC codes
 
-num_unique_employers <- length(unique(general_data$jobs_row_id))
+
+##########################
+# Over-representation in investigations: soc titles/naics codes
+##########################
+
+## pick up here and then move to ACS
+
+## first, collapse soc titles
+soc_titles_ranked = general_data %>%
+          group_by(SOC_TITLE) %>%
+          filter(n() > 0.05*nrow(general_data)) %>%
+          pull(SOC_TITLE) 
 
 plot_5_data <- general_data %>%
   group_by(SOC_CODE) %>%
