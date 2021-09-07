@@ -13,6 +13,7 @@ library(reshape2)
 library(RColorBrewer)
 library(here)
 library(scales)
+library(stringr)
 
 RUN_FROM_CONSOLE = FALSE
 if(RUN_FROM_CONSOLE){
@@ -282,6 +283,7 @@ general_data$ATTORNEY_AGENT_NAME_CLEANED <- aan
 general_data <- general_data %>%
   mutate(ATTORNEY_AGENT_NAME_CLEANED = ifelse(ATTORNEY_AGENT_NAME_CLEANED == "", "Missing", ATTORNEY_AGENT_NAME_CLEANED))
 
+
 # group by unique employers and whether investigation
 attorney_rep = general_data %>%
                 group_by(ATTORNEY_AGENT_NAME_CLEANED) %>%
@@ -295,6 +297,9 @@ attorney_rep = general_data %>%
         mutate(investigated_prop_employers = ifelse(is.na(n_investigated), 0,
                                                     n_investigated/n_employers)) %>%
         arrange(desc(investigated_prop_employers))
+
+## first plot dist of n employers
+sum(attorney_rep$n_employers >= 10, na.rm = TRUE)
 
 #to plot: for those with at least 5 employers, ratio
 attorney_rep_top = attorney_rep %>% filter(n_employers >= 10) %>% arrange(desc(investigated_prop_employers)) %>%
@@ -431,122 +436,51 @@ ggsave(here("output/figs", "attorney_highviol_TRLAstates.pdf"), width = 12, heig
 # Over-representation in investigations: soc titles/naics codes
 ##########################
 
-## pick up here and then move to ACS
+## create new 6 digit soc code
+trla_data = trla_data %>%
+        mutate(soc_code_6dig = gsub("\\..*", "", SOC_CODE)) 
 
-## first, collapse soc titles
-soc_titles_ranked = general_data %>%
-          group_by(SOC_TITLE) %>%
-          filter(n() > 0.05*nrow(general_data)) %>%
-          pull(SOC_TITLE) 
+## summarized titles
+trla_data_wtitle = trla_data %>%
+        group_by(soc_code_6dig, SOC_TITLE) %>%
+        summarise(count_titles = n()) %>%
+        filter(count_titles == max(count_titles)) %>%
+        rename(soc_title_consolidated = SOC_TITLE) %>%
+        right_join(trla_data, by = "soc_code_6dig")
 
-plot_5_data <- general_data %>%
-  group_by(SOC_CODE) %>%
-  summarize(distinct_jobs_prop = n_distinct(jobs_row_id) / num_unique_employers)
+## code consolidated
+trla_v_WHD_soc = trla_data_wtitle %>%
+        mutate(soc_summarized = ifelse(soc_code_6dig %in% c("45-2091", 
+                                                            "45-2092",
+                                                            "45-2093"), soc_title_consolidated, 
+                                       "Other")) %>%
+        group_by(soc_summarized, outcome_compare_TRLA_WHD) %>%
+        summarise(soc_num = n_distinct(jobs_row_id)) %>%
+        ungroup() %>%
+        left_join(trla_data %>%
+                    mutate(soc_summarized = ifelse(SOC_TITLE %in% soc_titles_ranked, SOC_TITLE, 
+                                                   "Other")) %>%
+                    group_by(outcome_compare_TRLA_WHD) %>%
+                    summarise(soc_denom = n_distinct(jobs_row_id)) %>%
+                    ungroup()) %>%
+        mutate(soc_prop = soc_num/soc_denom,
+               soc_wrapped = str_wrap(soc_summarized, width = 15)) 
 
-plot_5_data_filtered <- general_data %>%
-  filter(is_matched_investigations == TRUE)
-
-num_unique_employers_with_investigations <- length(unique(plot_5_data_filtered$jobs_row_id))
-
-plot_5_data_more <- plot_5_data_filtered %>%
-  group_by(SOC_CODE) %>%
-  summarize(distinct_investigations_prop = n_distinct(jobs_row_id) / num_unique_employers_with_investigations)
-
-plot_5_data_final <- merge(plot_5_data, plot_5_data_more, by = "SOC_CODE", all.x = TRUE)
-
-plot_5_data_final <- plot_5_data_final %>%
-  mutate(plotting_ratio = distinct_investigations_prop / distinct_jobs_prop) %>%
-  filter(SOC_CODE != "")
-
-# now the plot (investigations)
-plot_5_data_final %>%
-  ggplot(aes(x = plotting_ratio)) +
-  geom_histogram() +
+#
+ggplot(trla_v_WHD_soc %>%
+      filter(outcome_compare_TRLA_WHD %in% c("TRLA; not WHD", 
+                                             "WHD; not TRLA")),
+      aes(x = soc_wrapped, y = soc_prop, fill = outcome_compare_TRLA_WHD)) +
+  geom_bar(stat = "identity", position = "dodge", 
+           color = "black") +
+  coord_flip() +
   theme_DOL() +
-  labs(x = "Plotting Ratio", y = "Number of SOC Codes", title = "Overrepresentation of SOC Codes for Investigated Entities")
+  labs(fill = "") +
+  theme(legend.position = c(0.8, 0.8)) +
+  xlab("") +
+  ylab("Proportion of employers in that investigation category") +
+  scale_fill_manual(values = c("TRLA; not WHD" = as.character(color_guide["TRLA intake"]),
+                               "WHD; not TRLA" = as.character(color_guide["WHD investigations"])))
 
-ggsave(here("output/figs", "fig_7.pdf"), width = 12, height = 8)
 
-# For violations
-plot_5_data_filtered_again <- general_data %>%
-  filter(outcome_is_investigation_overlapsd == TRUE)
-
-num_unique_employers_with_violations <- length(unique(plot_5_data_filtered_again$jobs_row_id))
-
-plot_5_data_third <- plot_5_data_filtered_again %>%
-  group_by(SOC_CODE) %>%
-  summarize(distinct_violations_prop = n_distinct(jobs_row_id) / num_unique_employers_with_violations)
-
-plot_5_data_final_plot2 <- merge(plot_5_data_more, plot_5_data_third, by = "SOC_CODE", all.x = TRUE)
-
-plot_5_data_final_plot2 <- plot_5_data_final_plot2 %>%
-  mutate(plotting_ratio_2 = distinct_violations_prop / distinct_investigations_prop) %>%
-  filter(SOC_CODE != "")
-
-# now the plot (violations)
-plot_5_data_final_plot2 %>%
-  ggplot(aes(x = plotting_ratio_2)) +
-  geom_histogram() +
-  theme_DOL() +
-  labs(x = "Plotting Ratio 2", y = "Number of SOC Codes", title = "Overrepresentation of SOC Codes for Entities with WHD Violations")
-
-ggsave(here("output/figs", "fig_8.pdf"), width = 12, height = 8)
-
-# plot 6: Overrepresentation of certain naics codes
-
-num_unique_employers <- length(unique(general_data$jobs_row_id))
-
-plot_6_data <- general_data %>%
-  group_by(naic_cd) %>%
-  summarize(distinct_jobs_prop = n_distinct(jobs_row_id) / num_unique_employers)
-
-plot_6_data_filtered <- general_data %>%
-  filter(is_matched_investigations == TRUE)
-
-num_unique_employers_with_investigations <- length(unique(plot_6_data_filtered$jobs_row_id))
-
-plot_6_data_more <- plot_6_data_filtered %>%
-  group_by(naic_cd) %>%
-  summarize(distinct_investigations_prop = n_distinct(jobs_row_id) / num_unique_employers_with_investigations)
-
-plot_6_data_final <- merge(plot_6_data, plot_6_data_more, by = "naic_cd", all.x = TRUE)
-
-plot_6_data_final <- plot_6_data_final %>%
-  mutate(plotting_ratio = distinct_investigations_prop / distinct_jobs_prop) # %>%
-
-# now the plot (investigations)
-plot_6_data_final %>%
-  ggplot(aes(x = plotting_ratio)) +
-  geom_histogram() +
-  theme_DOL() +
-  labs(x = "Plotting Ratio", y = "Number of NAICS Codes", title = "Overrepresentation of NAICS Codes for Investigated Entities")
-
-# weird that these are all the same...
-
-ggsave(here("output/figs", "fig_9.pdf"), width = 12, height = 8)
-
-# For violations
-plot_6_data_filtered_again <- general_data %>%
-  filter(outcome_is_investigation_overlapsd == TRUE)
-
-num_unique_employers_with_violations <- length(unique(plot_6_data_filtered_again$jobs_row_id))
-
-plot_6_data_third <- plot_6_data_filtered_again %>%
-  group_by(naic_cd) %>%
-  summarize(distinct_violations_prop = n_distinct(jobs_row_id) / num_unique_employers_with_violations)
-
-plot_6_data_final_plot2 <- merge(plot_6_data_more, plot_6_data_third, by = "naic_cd", all.x = TRUE)
-
-plot_6_data_final_plot2 <- plot_6_data_final_plot2 %>%
-  mutate(plotting_ratio_2 = distinct_violations_prop / distinct_investigations_prop)
-
-# now the plot (violations)
-plot_6_data_final_plot2 %>%
-  ggplot(aes(x = plotting_ratio_2)) +
-  geom_histogram() +
-  theme_DOL() +
-  labs(x = "Plotting Ratio 2", y = "Number of NAICS Codes", title = "Overrepresentation of NAICS Codes for Entities with WHD Violations")
-
-ggsave(here("output/figs", "fig_10.pdf"), width = 12, height = 8)
-
-# shading post covid?
+ggsave(here("output/figs", "soc_code_compare.pdf"), width = 12, height = 8)
