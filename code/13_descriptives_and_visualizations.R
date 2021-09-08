@@ -25,17 +25,21 @@ if(RUN_FROM_CONSOLE){
 }
 
 
-setwd(DATA_DIR)
+
 
 #####################
 # Loading in Data
 #####################
 
 # trla_file
-trla_data <- readRDS("clean/whd_violations_wTRLA_catchmentonly.RDS")
+trla_data <- readRDS(sprintf("%s/%s", 
+            DATA_DIR, 
+            "clean/whd_violations_wTRLA_catchmentonly.RDS"))
 
 # general file
-general_data <- readRDS("clean/whd_violations.RDS")
+general_data <- readRDS(sprintf("%s/%s", 
+              DATA_DIR, 
+            "clean/whd_violations.RDS"))
 
 ###################
 # Visualizations
@@ -76,6 +80,9 @@ color_guide = c("jobs" = "#1B9E77",
 ##########################
 # Clean year and attorney agent for WHD data
 ##########################
+
+here::here()
+
 
 general_data <- general_data %>%
   mutate(JOB_START_DATE = ymd(JOB_START_DATE))
@@ -457,8 +464,10 @@ trla_v_WHD_soc = trla_data_wtitle %>%
         group_by(soc_summarized, outcome_compare_TRLA_WHD) %>%
         summarise(soc_num = n_distinct(jobs_row_id)) %>%
         ungroup() %>%
-        left_join(trla_data %>%
-                    mutate(soc_summarized = ifelse(SOC_TITLE %in% soc_titles_ranked, SOC_TITLE, 
+        left_join(trla_data_wtitle %>%
+                    mutate(soc_summarized = ifelse(soc_code_6dig %in% c("45-2091", 
+                                                                        "45-2092",
+                                                                        "45-2093"), soc_title_consolidated, 
                                                    "Other")) %>%
                     group_by(outcome_compare_TRLA_WHD) %>%
                     summarise(soc_denom = n_distinct(jobs_row_id)) %>%
