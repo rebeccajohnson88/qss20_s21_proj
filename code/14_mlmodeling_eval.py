@@ -25,7 +25,7 @@ from sklearn.svm import SVC
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.model_selection import GroupShuffleSplit
 
-## functions
+## modeling functions 
 def get_metrics(y_test, y_predicted):
     '''generate evaluation scores accroding predicted y'''
     accuracy = accuracy_score(y_test, y_predicted)
@@ -60,7 +60,7 @@ def estimate_models(model_list, X_train, y_train, X_test, y_test):
     return evals_df
 
 ## create a list of model objects
-model_list1 = [DecisionTreeClassifier(random_state=0, max_depth = 5),
+model_list_test = [DecisionTreeClassifier(random_state=0, max_depth = 5),
                     DecisionTreeClassifier(random_state=0, max_depth = 50)]
 model_list = [DecisionTreeClassifier(random_state=0, max_depth = 5),
                     DecisionTreeClassifier(random_state=0, max_depth = 50),
@@ -74,6 +74,20 @@ model_list = [DecisionTreeClassifier(random_state=0, max_depth = 5),
                 LogisticRegression(penalty = "l1",max_iter=10000),
                 LogisticRegressionCV(solver = "liblinear",
                                  penalty = "l1", max_iter=10000)]
+
+## define paths
+print(os.getcwd())
+clean_data_dir = "Dropbox/qss20_finalproj_rawdata/summerwork/clean/"
+whd_train = pd.read_pickle(clean_data_dir + "whd_training.pkl")
+print(whd_train.head())
+print(whd_train.shape)
+print(whd_train.outcome_is_viol_overlapsd.value_counts(dropna = False))
+
+
+## read in outputs of previous scripts
+trla_train = pd.read_pickle("")
+
+
 print("Length of classifier list is:" + str(len(model_list)))
 
 evals_df = estimate_models(model_list, X_train, y_train, X_test, y_test)

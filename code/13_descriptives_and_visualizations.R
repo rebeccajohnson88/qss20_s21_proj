@@ -32,14 +32,14 @@ if(RUN_FROM_CONSOLE){
 #####################
 
 # trla_file
-trla_data <- readRDS(sprintf("%s/%s", 
+trla_data <- read.csv(sprintf("%s/%s", 
             DATA_DIR, 
-            "clean/whd_violations_wTRLA_catchmentonly.RDS"))
+            "clean/whd_violations_wTRLA_catchmentonly.csv"))
 
 # general file
-general_data <- readRDS(sprintf("%s/%s", 
+general_data <- read.csv(sprintf("%s/%s", 
               DATA_DIR, 
-            "clean/whd_violations.RDS"))
+            "clean/whd_violations.csv"))
 
 ###################
 # Visualizations

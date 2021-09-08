@@ -7,8 +7,7 @@
 import numpy as np
 import pandas as pd
 import os
-# import pickle5 as pickle
-# import matplotlib.pyplot as plt
+
 
 # ML imports
 from sklearn.compose import ColumnTransformer
@@ -25,19 +24,15 @@ from sklearn.tree import DecisionTreeClassifier
 from sklearn.model_selection import GroupShuffleSplit
 
 #file paths
-DROPBOX_INT_PATH = '../../qss20_finalproj_rawdata/summerwork/'
-TRLA_DATA_FILE_NAME = "clean/whd_violations_wTRLA_catchmentonly.csv"
-GENERAL_DATA_FILE_NAME = "clean/whd_violations.csv"
-TRLA_DATA_FILE_PATH = os.path.join(DROPBOX_INT_PATH, TRLA_DATA_FILE_NAME)
-GENERAL_DATA_FILE_PATH = os.path.join(DROPBOX_INT_PATH, GENERAL_DATA_FILE_NAME)
+DROPBOX_YOUR_PATH = "/Users/rebeccajohnson/Dropbox/qss20_finalproj_rawdata/summerwork/"
 
 ### local path for now
-TRLA_DATA_WOUTCOMES = "/Users/grantanapolle/Dropbox/qss20_finalproj_rawdata/summerwork/clean/whd_violations_wTRLA_catchmentonly.csv"
-WHD_DATA_WOUTCOMES = "/Users/grantanapolle/Dropbox/qss20_finalproj_rawdata/summerwork/clean/whd_violations.csv"
-H2A_FEATURES = "/Users/grantanapolle/Dropbox/qss20_finalproj_rawdata/summerwork/intermediate/h2a_combined_2014-2021.pkl"
+trla_df_pre = pd.read_csv(DROPBOX_YOUR_PATH + "clean/whd_violations_wTRLA_catchmentonly.csv")
+whd_df_pre = pd.read_csv(DROPBOX_YOUR_PATH + "clean/whd_violations.csv")
+features_df = pd.read_pickle(DROPBOX_YOUR_PATH + "intermediate/h2a_combined_2014-2021.pkl")
 
-
-# In[2]:
+print("TRLA-only data is " + str(trla_df_pre.shape[0]) + " rows")
+print("WHD data is " + str(whd_df_pre.shape[0]) + " rows")
 
 
 #### functions
@@ -94,34 +89,42 @@ def process_data(df, outcomes):
     ##### do a train test split
     # split into train and test sets (80/20) -> returns index of the split, not the split df itself
     # group shuffle split on job group id: 'jobs_group_id'
-    gs = GroupShuffleSplit(n_splits=2, train_size=.7, random_state=42)
+    gs = GroupShuffleSplit(n_splits=2, train_size=.8, random_state=42)
     train_ix, test_ix = next(gs.split(x, y, groups=x.jobs_group_id))
     
-    # now actually split the df before imputation
-    x_train = x.loc[train_ix]
-    x_test = x.loc[test_ix]
     
+    # now actually split the df before imputation
+    x_train = x.loc[train_ix].reset_index()
+    x_test = x.loc[test_ix].reset_index()
+    x_train['merge_index'] = ["id_" + str(x) for x in np.arange(0, x_train.shape[0])]
+    x_test["merge_index"] = ["id_" + str(x) for x in np.arange(0, x_test.shape[0])]
+   
+    y_train = y.loc[train_ix].reset_index()
+    y_test = y.loc[test_ix].reset_index()
+    y_train['merge_index'] = ["id_" + str(x) for x in np.arange(0, y_train.shape[0])]
+    y_test["merge_index"] = ["id_" + str(x) for x in np.arange(0, y_test.shape[0])]
+    
+
     # imputation
     x_train_imputed, cat_cols_train = imputation(x_train)
     x_test_imputed, cat_cols_test = imputation(x_test)
-    
+    id_cols = ["jobs_group_id", "merge_index"]
+    cat_cols_fordummy = [col for col in cat_cols_train if col not in id_cols]
+    cat_cols_fordummy_test = [col for col in cat_cols_test if col not in id_cols]
     
     # categorical dummies
-    x_train_imputed_dummies = gen_dum_categorical(x_train_imputed, cat_cols_train)
-    x_test_imputed_dummies = gen_dum_categorical(x_test_imputed, cat_cols_test)
+    x_train_imputed_dummies = gen_dum_categorical(x_train_imputed, cat_cols_fordummy)
+    x_test_imputed_dummies = gen_dum_categorical(x_test_imputed, cat_cols_fordummy_test)
     
     print(x_train_imputed_dummies.shape, x_test_imputed_dummies.shape)
+    print("checking to see if we preserved merge index")
+    print([col for col in x_train_imputed_dummies.columns if "merge_index" in col])
     
-    train_processed = pd.merge(x_train_imputed_dummies.reset_index(), y.loc[train_ix].reset_index(), 
-                               how = 'left', on = 'index')
-    train_processed = train_processed.drop(columns = 'index')
+    train_processed = pd.merge(x_train_imputed_dummies, y_train, 
+                              on = "merge_index")
     
-    test_processed = pd.merge(x_test_imputed_dummies.reset_index(), y.loc[test_ix].reset_index(), 
-                              how = 'left', on = 'index')
-    test_processed = test_processed.drop(columns = 'index')
-    
-    print(train_processed.shape, test_processed.shape)
-
+    test_processed = pd.merge(x_test_imputed_dummies, y_test, 
+                             on = 'merge_index')
         
     return train_processed, test_processed
 
@@ -170,23 +173,9 @@ def gen_dum_categorical(df, features):
     
 
 
-# In[3]:
-
-
-trla_df_pre = pd.read_csv(TRLA_DATA_WOUTCOMES)
-whd_df_pre = pd.read_csv(WHD_DATA_WOUTCOMES)
-
-
-# In[4]:
-
-
-#read in features then manually decide which to keep based on nunique()
-features_df = pd.read_pickle(H2A_FEATURES)
+## get potential features from disclosure data
 features_columns = features_df.columns.tolist()
 print(whd_df_pre[features_columns].nunique())
-
-
-# In[5]:
 
 
 features_list = ['ATTORNEY_AGENT_CITY', 'JOB_TITLE', 'EMPLOYER_STATE', 'SOC_CODE', 'REQUESTED_END_DATE_OF_NEED', 
@@ -213,19 +202,18 @@ trla_df_pre = trla_df_pre.join(trla_outcome_dummies)
 trla_outcomes = trla_outcome_dummies.columns.tolist()
 
 
-# In[7]:
-
-
+# preprocess each dataset
 whd_train_processed, whd_test_processed = process_data(whd_df_pre, whd_outcomes)
 
 trla_train_processed, trla_test_processed = process_data(trla_df_pre, trla_outcomes)
 
 
-# In[8]:
+# write outputs
+whd_train_processed.to_pickle(DROPBOX_YOUR_PATH + 'clean/whd_training.pkl')
+whd_test_processed.to_pickle(DROPBOX_YOUR_PATH + 'clean/whd_testing.pkl')
+trla_train_processed.to_pickle(DROPBOX_YOUR_PATH + 'clean/trla_training.pkl')
+trla_test_processed.to_pickle(DROPBOX_YOUR_PATH + '/clean/trla_testing.pkl')
 
 
-whd_train_processed.to_pickle('../../qss20_finalproj_rawdata/summerwork/clean/whd_training.pkl')
-whd_test_processed.to_pickle('../../qss20_finalproj_rawdata/summerwork/clean/whd_testing.pkl')
-trla_train_processed.to_pickle('../../qss20_finalproj_rawdata/summerwork/clean/trla_training.pkl')
-trla_test_processed.to_pickle('../../qss20_finalproj_rawdata/summerwork/clean/trla_testing.pkl')
+            
 
