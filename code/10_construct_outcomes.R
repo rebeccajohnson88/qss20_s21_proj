@@ -72,14 +72,22 @@ matched_data_WHD <- matched_data_WHD %>%
 # Creating outcome variables with WHD
 #############################
 
+## use case-when logic so false if not true
 matched_data_WHD <- matched_data_WHD %>%
   mutate(outcome_is_any_investigation = is_matched_investigations,
-         outcome_is_investigation_aftersd = ifelse(is_matched_investigations & findings_start_date >= JOB_START_DATE, TRUE, FALSE),
-         outcome_is_investigation_before_sd = ifelse(is_matched_investigations & findings_start_date < JOB_START_DATE, TRUE, FALSE),
-         outcome_is_investigation_overlapsd = ifelse(is_matched_investigations & findings_start_date >= JOB_START_DATE & findings_start_date <= JOB_END_DATE, TRUE, FALSE),
-         outcome_is_viol_overlapsd = ifelse(is_matched_investigations & findings_start_date >= JOB_START_DATE & findings_start_date <= JOB_END_DATE & h2a_violtn_cnt > 0, TRUE, FALSE),
-         outcome_is_h2areg_investigation_overlapsd = ifelse(is_matched_investigations & findings_start_date >= JOB_START_DATE & findings_start_date <= JOB_END_DATE &
-                                                              reg_act == "H2A", TRUE, FALSE))
+         outcome_is_investigation_aftersd = case_when(is_matched_investigations & findings_start_date >= JOB_START_DATE ~ TRUE, 
+                                                      TRUE ~ FALSE),
+         outcome_is_investigation_before_sd = case_when(is_matched_investigations & findings_start_date < JOB_START_DATE~ TRUE, 
+                                                      TRUE ~ FALSE),
+         outcome_is_investigation_overlapsd = case_when(is_matched_investigations & findings_start_date >= JOB_START_DATE & findings_start_date <= JOB_END_DATE ~ TRUE, 
+                                                      TRUE ~ FALSE),
+         outcome_is_viol_overlapsd = case_when(is_matched_investigations & findings_start_date >= JOB_START_DATE & findings_start_date <= JOB_END_DATE & h2a_violtn_cnt > 0 ~  TRUE, 
+                                               TRUE ~ FALSE),
+         outcome_is_h2aflsamspaviol_overlapsd = case_when(is_matched_investigations & findings_start_date >= JOB_START_DATE & findings_start_date <= JOB_END_DATE & 
+                                              (h2a_violtn_cnt > 0 | flsa_violtn_cnt > 0 |
+                                               mspa_violtn_cnt) ~  TRUE, 
+                                               TRUE ~ FALSE))
+                              
 
 ## see that broader definition of including registration acts other than h2a only picks up 15 additional
 ## investigations so use normal one
@@ -108,8 +116,10 @@ matched_data_trla <- matched_data_trla %>%
          JOB_END_DATE = ymd(JOB_END_DATE)) %>%
   mutate(outcome_is_any_investigation_trla = is_matched_investigations,
          ## in case of trla since the dates aren't a timespan but instead a sngle intake date
-         outcome_is_investigation_overlapsd_trla = ifelse(is_matched_investigations & intake_date >= JOB_START_DATE, TRUE, FALSE),
-         outcome_is_investigation_before_sd_trla = ifelse(is_matched_investigations & intake_date < JOB_START_DATE, TRUE, FALSE))
+         outcome_is_investigation_overlapsd_trla = case_when(is_matched_investigations & intake_date >= JOB_START_DATE ~ TRUE, 
+                                                             TRUE ~ FALSE),
+         outcome_is_investigation_before_sd_trla = case_when(is_matched_investigations & intake_date < JOB_START_DATE ~ TRUE, 
+                                                             TRUE ~ FALSE))
 
 
 

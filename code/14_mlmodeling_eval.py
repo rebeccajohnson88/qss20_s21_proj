@@ -1,6 +1,6 @@
-# code to run model/eval
-# CG
-# 9/1/21
+#######
+### Code to run ML models
+#######
 
 ### imports
 import re
