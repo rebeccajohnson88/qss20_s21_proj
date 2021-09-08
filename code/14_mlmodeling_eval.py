@@ -24,6 +24,7 @@ from sklearn.naive_bayes import MultinomialNB
 from sklearn.svm import SVC
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.model_selection import GroupShuffleSplit
+from sklearn.utils import resample
 
 ## modeling functions 
 def get_metrics(y_test, y_predicted):
@@ -34,9 +35,11 @@ def get_metrics(y_test, y_predicted):
     f1 = f1_score(y_test, y_predicted, average='binary')
     return accuracy, precision, recall, f1
 
-def estimate_models(model_list, X_train, y_train, X_test, y_test):
+def estimate_models(model_list, model_list_names, X_train, y_train, X_test, y_test):
     '''takes in a list of models, fit and test each one, generates a df with evaluation parameters of all models ran'''
     evals_array = []
+    confus_array = []
+    pred_array = []
     for i in range(0, len(model_list)):
         ## pull out model
         one_model = model_list[i]
@@ -45,23 +48,35 @@ def estimate_models(model_list, X_train, y_train, X_test, y_test):
         ## fit the model and evaluate
         one_model.fit(X_train, y_train)
         y_pred = one_model.predict(X_test)
+        actual_v_pred = pd.DataFrame({'predicted': y_test, 
+                                       'actual': y_pred})
+        actual_v_pred['model'] = model_list_names[i]
+        pred_array.append(actual_v_pred)
 
-        print("Confusion matrix \n")
-        print(pd.crosstab(pd.Series(y_test, name='Actual'), pd.Series(y_pred, name='Predicted')))
+        print("Calculating Confusion matrix \n")
+        confus_mat = pd.crosstab(actual_v_pred['actual'], actual_v_pred['predicted'])
+        confus_mat['model'] = model_list_names[i]
+        confus_mat['actual'] = confus_mat.index
+        confus_mat_long = pd.melt(confus_mat, id_vars = ["model", 'actual'])
+        confus_array.append(confus_mat_long)
 
         accuracy, precision, recall, f1 = get_metrics(y_test, y_pred)
         print("accuracy = %.3f \nprecision = %.3f \nrecall = %.3f \nf1 = %.3f" % (accuracy, precision, recall, f1))
 
-        evals_array.append(pd.DataFrame({'Model': [model_list[i]],
+        evals_array.append(pd.DataFrame({'Model': [model_list_names[i]],
                                      'Accuracy': [accuracy], 'Precision': [precision], 'Recall':[recall], 'f1-score':[f1]
                                       }))
 
     evals_df = pd.concat(evals_array)
-    return evals_df
+    confus_df = pd.concat(confus_array)
+    pred_df = pd.concat(pred_array)
+    print("concatenated and returned object")
+    return evals_df, confus_df, pred_df
 
 ## create a list of model objects
 model_list_test = [DecisionTreeClassifier(random_state=0, max_depth = 5),
                     DecisionTreeClassifier(random_state=0, max_depth = 50)]
+model_list_test_names = ['dt_shallow', 'dt_deep']
 model_list = [DecisionTreeClassifier(random_state=0, max_depth = 5),
                     DecisionTreeClassifier(random_state=0, max_depth = 50),
                     RandomForestClassifier(n_estimators = 100, max_depth = 20),
@@ -75,21 +90,48 @@ model_list = [DecisionTreeClassifier(random_state=0, max_depth = 5),
                 LogisticRegressionCV(solver = "liblinear",
                                  penalty = "l1", max_iter=10000)]
 
-## define paths
-print(os.getcwd())
-clean_data_dir = "Dropbox/qss20_finalproj_rawdata/summerwork/clean/"
-whd_train = pd.read_pickle(clean_data_dir + "whd_training.pkl")
-print(whd_train.head())
-print(whd_train.shape)
-print(whd_train.outcome_is_viol_overlapsd.value_counts(dropna = False))
+
+## define paths and read in data
+DROPBOX_YOUR_PATH = "Dropbox/qss20_finalproj_rawdata/summerwork/"
+MODEL_OUTPUT_PATH = "Dropbox/qss20_s21_proj/output/model_outputs/"
+whd_train_init = pd.read_pickle(DROPBOX_YOUR_PATH + "clean/whd_training.pkl")
+whd_test = pd.read_pickle(DROPBOX_YOUR_PATH + "clean/whd_testing.pkl")
+focal_outcome = "outcome_is_investigation_overlapsd" 
+
+## upsample minority class in training
+df_majority = whd_train_init[whd_train_init[focal_outcome] == False].copy()
+df_minority = whd_train_init[whd_train_init[focal_outcome] == True].copy()
+df_minority_upsamp = resample(df_minority, 
+                              replace = True, 
+                              n_samples = df_majority.shape,
+                              random_state = 91988)
+
+whd_train = pd.concat([df_majority, df_minority_upsamp])
 
 
-## read in outputs of previous scripts
-trla_train = pd.read_pickle("")
+## remove non-pverlapping features
+id_cols = ['jobs_group_id', "merge_index", "index", "jobs_row_id", "level_0"]
+common_cols = set(whd_train.columns).intersection(set(whd_test.columns)).difference(id_cols)
 
 
-print("Length of classifier list is:" + str(len(model_list)))
+## then, subset to each, separate out outcome var, 
+## and work on code inside
+outcomes_WHD = [col for col in whd_train if "outcome" in col]
+X_train = whd_train[[col for col in whd_train.columns if col not in outcomes_WHD and col in common_cols]].copy()
+X_test = whd_test[[col for col in whd_test.columns if col not in outcomes_WHD and col in common_cols]].copy()
+y_train = whd_train[["outcome_is_investigation_overlapsd"]].copy().iloc[:, 0].to_numpy()
+y_test = whd_test[['outcome_is_investigation_overlapsd']].copy().iloc[:, 0].to_numpy()
 
-evals_df = estimate_models(model_list, X_train, y_train, X_test, y_test)
-evals_df.to_csv("model_evaluation.csv", encoding='utf-8', index=False)
-print(evals_df)
+
+evals, confus, pred = estimate_models(model_list_test,
+                                     model_list_test_names,
+                                     X_train, y_train, X_test, y_test)
+
+## save results
+evals.to_csv(MODEL_OUTPUT_PATH + "evals_df_" + focal_outcome + ".csv", index = False)
+confus.to_csv(MODEL_OUTPUT_PATH + "confus_df_" + focal_outcome + ".csv", index = False)
+pred.to_csv(MODEL_OUTPUT_PATH + "pred_df_" + focal_outcome + ".csv", index = False)
+
+
+
+
