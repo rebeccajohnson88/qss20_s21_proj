@@ -138,26 +138,27 @@ def imputation(df):
     print('number of numeric colums: ', len(num_cols))
     print('number of categorical colums: ', len(cat_cols))
     
-    cat_df = df[cat_cols]
-    num_df = df[num_cols]
+    cat_df = df[cat_cols].copy()
+    num_df = df[num_cols].copy()
+    cat_df['merge_index_impute'] = ["id_" + str(x) for x in np.arange(0, cat_df.shape[0])]
+    num_df['merge_index_impute'] = ["id_" + str(x) for x in np.arange(0, num_df.shape[0])]
+
     
     # SimpleImputer on the categorical features and apply a "missing_value" to NANs
     imputer_cat = SimpleImputer(strategy='constant', fill_value='missing_value')
     cat_df_imputed = pd.DataFrame(imputer_cat.fit_transform(cat_df))
     cat_df_imputed.columns = cat_df.columns
 
-    # SimpleImputer on the date features and apply mode to NANs
-    imputer_num = SimpleImputer(strategy='most_frequent', verbose=5)
-    num_df_imputed = pd.DataFrame(imputer_num.fit_transform(num_df))
-    num_df_imputed.columns = num_df.columns
+    # SimpleImputer on the ACS and date features and apply mean to nan
+    num_df_imputed = num_df.fillna(num_df.mean(axis = 0), inplace = False)
     
     # merge the imputed num/cat dfs back
-    imputed_combined = pd.merge(cat_df_imputed.reset_index(),
-                                num_df_imputed.reset_index(), 
-                                how='left', on='index')
+    imputed_combined = pd.merge(cat_df_imputed,
+                                num_df_imputed, 
+                                 on='merge_index_impute')
     
     print('%s rows lost in merge' %(num_df_imputed.shape[0]-imputed_combined.shape[0]))
-    imputed_combined = imputed_combined.drop(columns = 'index')
+    imputed_combined = imputed_combined.drop(columns = 'merge_index_impute')
     print(imputed_combined.shape)
     
     return imputed_combined, cat_cols
@@ -206,6 +207,22 @@ trla_outcomes = trla_outcome_dummies.columns.tolist()
 whd_train_processed, whd_test_processed = process_data(whd_df_pre, whd_outcomes)
 
 trla_train_processed, trla_test_processed = process_data(trla_df_pre, trla_outcomes)
+
+
+
+## test outside
+# =============================================================================
+# acs_sample = [col for col in whd_df_pre if "acs" in col]
+# acs_sample_2 = acs_sample[0:3]
+# num_df = whd_df_pre[acs_sample_2].copy()
+# num_df_imput = num_df.fillna(num_df.mean(axis = 0), inplace = False)
+# num_df_imput.head()
+# print(num_df.columns[num_df.isna().any()].tolist())
+# print(num_df_imput.columns[num_df_imput.isna().any()].tolist())
+# 
+# test_res, test_cat  = imputation(num_df)
+# print(test_res.columns[test_res.isna().any()].tolist())
+# =============================================================================
 
 
 # write outputs
