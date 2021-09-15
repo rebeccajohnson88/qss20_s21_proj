@@ -1,0 +1,244 @@
+---
+title: "Text analysis job addendums"
+author: "Data challenge"
+output: html_document
+---
+
+
+# 0. Load packages and graphing theme
+
+```{r}
+## Load packages
+library(dplyr)
+library(data.table)
+library(stm)
+library(ggplot2)
+library(lubridate)
+library(here)
+library(tm)
+library(xtable)
+theme_new <- function(base_size = 16, base_family = "Helvetica"){
+  theme_bw(base_size = base_size, base_family = base_family) %+replace%
+    theme(
+      panel.grid = element_blank(),   
+      panel.border = element_rect(fill = NA, colour = "black", size=1),
+      panel.background = element_rect(fill = "white", colour = "black"), 
+      strip.background = element_rect(fill = NA),
+      axis.text.x = element_text(color = "black"),
+      axis.text.y = element_text(color = "black")
+    )
+}
+
+
+DROPBOX_YOUR_PATH = "../qss20_finalproj_rawdata/summerwork"
+
+
+```
+
+
+
+## Read in rowbound addendums data
+
+
+```{r}
+## read in raw data
+df_raw  = read.csv(sprintf("%s/intermediate/merged_addendums_jobdisclosures.csv", 
+                           DROPBOX_YOUR_PATH)) 
+
+
+## read in TRLA catchment state coded data
+trla_catchment = read.csv(sprintf("%s/clean/whd_violations_wTRLA_catchmentonly.csv", 
+                           DROPBOX_YOUR_PATH))
+
+example_emp = "10096_1"
+
+print(xtable(trla_catchment %>% filter(jobs_group_id == example_emp) %>%
+        select(EMPLOYER_NAME, EMPLOYER_CITY, EMPLOYER_STATE, CASE_NUMBER, CASE_STATUS, 
+               JOB_START_DATE, JOB_END_DATE)),
+      include.rownames = FALSE)
+
+print(xtable(trla_catchment %>% filter(jobs_group_id == example_emp) %>%
+        select(EMPLOYER_NAME, EMPLOYER_CITY, EMPLOYER_STATE, CASE_NUMBER, CASE_STATUS, 
+               JOB_START_DATE, JOB_END_DATE, investigations_group_id, case_id, reg_act, 
+               h2a_violtn_cnt, )),
+      include.rownames = FALSE)
+
+
+mult_jobs = trla_catchment %>% group_by(jobs_group_id) %>% filter(length(unique(jobs_row_id)) > 5 &
+                                                              length(unique(toupper(EMPLOYER_NAME))) > 1) %>%
+        arrange(jobs_group_id) %>%
+        select(EMPLOYER_NAME, EMPLOYER_CITY, EMPLOYER_STATE, CASE_NUMBER,
+               JOB_START_DATE, JOB_END_DATE) 
+
+acs_feat = gsub("\\_|\\.", " ", 
+        sort(grep("^acs", colnames(trla_catchment), value = TRUE))) 
+
+## look at overlapping case numbers- see that they are all 2020-2021 
+trla_catchment = trla_catchment %>%
+          mutate(in_addendums = ifelse(CASE_NUMBER %in% df_raw$CASE_NUMBER, TRUE, FALSE))
+
+
+## make sure not differntial within 2021
+summarize_addendum_status = trla_catchment %>%
+        filter(data_source %in% c("file_2020", "file_2021")) %>%
+        group_by(outcome_compare_TRLA_WHD, in_addendums) %>%
+        summarise(num = n()) %>%
+        left_join(trla_catchment %>%
+        filter(data_source %in% c("file_2020", "file_2021")) %>%
+        group_by(outcome_compare_TRLA_WHD) %>%
+        summarise(denom = n())) %>%
+        mutate(prop_each = num/denom)
+
+print(xtable(summarize_addendum_status), include.rownames = FALSE)
+
+
+random_sample_addendums = paste(sample(df_raw$JOB_DESCRIPTION, 5), collapse = " ")
+split_addendums = gsub("[[:punct:]]", "", 
+                  tolower(unlist(strsplit(random_sample_addendums, "\\s+|\\."))))
+work_variations = unique(grep(".*work.*", split_addendums, value = TRUE))
+
+## join addendums to additional information- do inner join
+addendums_winfo = merge(df_raw, trla_catchment %>% select(CASE_NUMBER, contains("outcome")),
+                        by= "CASE_NUMBER") %>% distinct() %>% filter(outcome_compare_TRLA_WHD != 
+                                                                    "WHD; not TRLA") %>%
+              mutate(job_desc_cleaner = gsub("\\-+", "", JOB_DESCRIPTION))
+
+## preprocess
+processed_add = textProcessor(documents = addendums_winfo$job_desc_cleaner, 
+                                metadata = addendums_winfo %>% select(outcome_compare_TRLA_WHD),
+                                lowercase = TRUE,
+                              removestopwords = TRUE, 
+                              removenumbers = TRUE,
+                            removepunctuation = TRUE, stem = TRUE,
+                                verbose = TRUE,
+                            customstopwords = c("after", "before", "employer", "employ", "job", "although", "provide", 
+                  "complete","hour","time",
+                  "begin","list","require","transportation", work_variations))
+
+## results in three outputs
+docs = processed_add$documents
+vocab = processed_add$vocab
+meta = processed_add$meta
+
+
+## plot number of focuments we'd remove at diff filtering thresholds
+## plot at different thresholds for minum number of ocuments
+plotRemoved(docs,
+            lower.thres = seq(from = 1, to = 100, by = 1))
+
+prep_formodel = prepDocuments(docs, vocab, 
+                              meta, lower.thres = 20, 
+                              upper.thres = dim(addendums_winfo)[0]-20)
+
+
+prep_formodel$docs.removed
+### estimate model, making sure to set a seed
+case_fixk_varymodel = selectModel(prep_formodel$documents,
+                                  prep_formodel$vocab,
+                                  K = 10,
+                                  prevalence = ~outcome_compare_TRLA_WHD,
+                                  data = prep_formodel$meta,
+                                  runs = 10,
+                                  seed = 19840404) 
+plotModels(case_fixk_varymodel)
+selected_model = case_fixk_varymodel$runout[[1]]
+
+
+
+```
+
+## Get correlation between attributes and topic prevalence
+
+```{r}
+relate_attributes = estimateEffect(1:10 ~ outcome_compare_TRLA_WHD,
+                meta = prep_formodel$meta, 
+                stmobj = selected_model,
+                uncertainty = "Global")
+
+
+
+
+```
+
+
+## Visualize results
+
+
+Recommend tidystm over built-in plotting functions
+
+```{r}
+#devtools::install_github("mikaelpoul/tidystm", dependencies = TRUE)
+library(tidystm)  
+
+
+att_forplot = extract.estimateEffect(x = relate_attributes,
+                         covariate = "outcome_compare_TRLA_WHD",
+                         method = "difference",
+                         labeltype = "frex",
+                         model = selected_model,
+                         cov.value1 = "TRLA; not WHD",
+                         cov.value2 = "Neither WHD nor TRLA")
+
+## order values of covariate by estimate size
+shorter_labels_list = sapply(as.character(att_forplot$label),
+                      strsplit, ",") 
+shorter_labels_variable = sprintf("%s;%s;%s",lapply(shorter_labels_list, 
+                                              "[", 1),
+                                  lapply(shorter_labels_list, 
+                                         "[", 2),
+                                  lapply(shorter_labels_list, 
+                                         "[", 3))
+att_forplot = att_forplot %>%
+              mutate(clean_label = shorter_labels_variable,
+                ordered_label = factor(clean_label,
+                                       levels=unique(clean_label[order(estimate)]), 
+                                       ordered=TRUE))
+
+## completed plot
+## specify that it's the frex measure
+## 
+ggplot(att_forplot, aes(x = ordered_label, 
+                                  y = estimate,
+                                  group = ordered_label,
+                                  color = ordered_label)) +
+  geom_point(size = 6) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = 'wheat4') +
+  geom_errorbar(aes(ymin = ci.lower,
+                    ymax = ci.upper),
+                width = 0.6,
+                lwd = 2) +
+  ylab('Estimated topic prevalence and 95% CI\n(Positive = higher prevalence in employers with TRLA intake)') +
+  xlab('') +
+  theme_new(base_size = 24) +
+  theme(axis.text.y   = element_blank(),
+        axis.ticks.y = element_blank(),
+        legend.position = c(0.7, 0.3),
+        legend.background = element_blank()) +
+  labs(color = "") +
+  coord_flip() +
+  ylim(-0.3, 0.8) 
+
+ggsave("output/figs/addendum_topic_variation.pdf",
+       plot = last_plot(),
+       device = "pdf",
+       width = 12,
+       height = 8)
+
+## find documents
+### relevant topics - topic 9 = crime etc
+### topic 1: neutral
+retrieve_docs = findThoughts(model = selected_model, texts = addendums_winfo$job_desc_cleaner,
+             topics = c(1, 9),
+             n = 30)
+
+topic1 = data.frame(topic = "Topic 1",
+                    document = retrieve_docs$docs$`Topic 1`) %>%
+        distinct() 
+
+topic9 = data.frame(topic = "Topic 9",
+                    document = retrieve_docs$docs$`Topic 9`) %>%
+        distinct() 
+
+print(xtable(topic9), include.rownames = FALSE)
+
+```
