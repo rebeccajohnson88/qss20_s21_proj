@@ -1,7 +1,8 @@
-# Repo for QSS20 final project
+# Repo for DOL Summer Data Challenge
+
 Repo for DOL Summer Equity Project.
 
-## Current scripts
+## Current scripts (`code`)
 
 - [00_scraping_DOLh2a.ipynb](https://github.com/rebeccajohnson88/qss20_s21_proj/blob/main/code/00_scraping_DOLh2a.ipynb)
   - Takes in: none
