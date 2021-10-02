@@ -36,29 +36,86 @@ Repo for DOL Summer Equity Project.
 - [04_acs_demographics_percentage.py](https://github.com/rebeccajohnson88/qss20_s21_proj/blob/main/code/04_acs_demographics_percentage.py)
   - Takes in: csv predictors, pickle acs tract demographics data, pickle H2A jobs tract data
   - What it does: identify which predictors to calculate percentage, calculate percentage, and clean and combine percentage and nonpercentage variables' data  
-  - Output: .pkl of calculated tract-level percentage data and remaining predictors data 
+  - Output: .pkl of calculated tract-level percentage data and remaining predictors data
 
-- [06_geocode_jobs.py](https://github.com/rebeccajohnson88/qss20_s21_proj/blob/main/code/06_geocode_jobs.py)
+- [04_acs_percentage_pulls.sh](https://github.com/rebeccajohnson88/qss20_s21_proj/blob/main/code/04_acs_percentage_pulls.sh)
+  - A bash script that pulls percentage (runs the script 04_acs_demographics_percentage.py on data) from year 2014 to 2019
+
+- [05_geocode_jobs.py](https://github.com/rebeccajohnson88/qss20_s21_proj/blob/main/code/06_geocode_jobs.py)
   - Takes in: pkl combined DOL h2a data
   - What it does: using api, geocode each data entry's location with latitude and longitude
   - Output: .pkl and csv of the geocoded data
 
-- [07_outcome_variables.R](https://github.com/rebeccajohnson88/qss20_s21_proj/blob/main/code/07_outcome_variables.R)
-  - Takes in: fuzzy matched data in RDS
-  - What it does: dedupes the data based on unique identifier; constructs outcome variables (based on findings start/end date and job star/end date) on the matched data
-  - Output: 1) deduped data 2) tables with constructed outcome variables
-
-- [09_tract_shape_files.ipynb](https://github.com/rebeccajohnson88/qss20_s21_proj/blob/main/code/09_tract_shape_files.ipynb)
-  - Takes in: tract shapefiles url
-  - What it does: scrapes census tract shape files
-  - Output: tract shape files in .shp
-
-- [10_h2a_tract_intersections.ipynb](https://github.com/rebeccajohnson88/qss20_s21_proj/blob/main/code/10_h2a_tract_intersections.ipynb)
+- [06_h2a_tract_intersections.ipynb](https://github.com/rebeccajohnson88/qss20_s21_proj/blob/main/code/06_h2a_tract_intersections.ipynb)
   - Takes in: tract shapefiles url and geocoded dol h2a data
-  - What it does: joins dol and tract data; plots case number on US map
-  - Output: .pkl dol h2a data merged with geoId; graph of case number on US map
+  - What it does: joins dol data with geoid (as a unique identifier) and tract shape; plots case number on US map
+  - Output: .pkl dol h2a data merged with geoId and corresponding tract shape; graph of case number on US map
 
+- [07_merging_acs_geocodedjobs.py](https://github.com/rebeccajohnson88/qss20_s21_proj/blob/main/code/07_merging_acs_geocodedjobs.py)
+  - Takes in: acs data with percentage calculation from year 2014-2019, h2a job data with tract information
+  - What it does: merge all the datasets
+  - Output: one .csv data file of 2014-2019 acs data merged with geocode/tract information (referred as h2a combined data form now on)
 
+- [08_clean_TRLA_intake.Rmd](https://github.com/rebeccajohnson88/qss20_s21_proj/blob/main/code/08_clean_TRLA_intake.Rmd)
+  - Takes in: TRLA report data in .xlsx/.xls
+  - What it does: cleans the data, consolidate opponent columns, deals with and flags missing values
+  - Output: one .csv and .RDS for cleaned TRLA data
+
+- [09_fuzzy_matching_TRLA.R](https://github.com/rebeccajohnson88/qss20_s21_proj/blob/main/code/09_fuzzy_matching_TRLA.R)
+  - Takes in: h2a combined data, cleaned TRLA data
+  - What it does: fuzzy matches between H2A applications data and the TRLA data
+  - Output: .RDS and .csv of matched data of trla and h2a job
+
+- [10_construct_outcomes.R](https://github.com/rebeccajohnson88/qss20_s21_proj/blob/main/code/10_construct_outcomes.R)
+  - Takes in: matched data (between h2a application and WHD data) with de-duped datasets, TRLA cleaned data, ACS data
+  - What it does: dedupes the data based on unique identifier; constructs outcome variables (based on findings start/end date and job star/end date) on the matched data, then merge ACS onto datasets
+  - Output: WHD data 1) with outcome variable columns and merged with ACS, 2) of TRLA states with outcome variables and merged with ACS
+
+- [10a_construct_jobs_address.py](https://github.com/rebeccajohnson88/qss20_s21_proj/blob/main/code/10a_construct_jobs_address.py)
+  - Takes in: h2a and WHD matched data
+  - What it does: creates unique job address column on dataset
+  - Output: h2a and WHD matched data with employer full address column
+
+- [12_mlmodeling_preprocessing.py](https://github.com/rebeccajohnson88/qss20_s21_proj/blob/main/code/12_mlmodeling_preprocessing.py)
+  - Takes in: TRLA state's whd data, general whd data, h2a 2014-2021 combined data (for feature columns extracction)
+  - What it does: preprocesses the TRLA and full whd data for later modeling; preprocess include: extract feature columns, generate dummy values for trivial row values, impute missing values, train and test split based on uniqie identifier `jobs_group_id`
+  - Output: .pkl files of split train and test for TRLA and full whd data.
+
+- [13_descriptives_and_visualizations.R](https://github.com/rebeccajohnson88/qss20_s21_proj/blob/main/code/13_descriptives_and_visualizations.R)
+  - Takes in: TRLA state's whd data, general whd data
+  - What it does: creates descriptives and visualizations based on merged WHD/TRLA data
+
+- [14_mlmodeling_eval.py](https://github.com/rebeccajohnson88/qss20_s21_proj/blob/main/code/14_mlmodeling_eval.py)
+  - Takes in: train and test split of WHD data
+  - What it does: run several machine learning models and evaluate the performance of trained models on prediction, including confusion matrices
+  - Output: .csv of evalutation results, confusion matrices, predictions on test data of different models
+
+- [15_viz_modelingoutputs.R](https://github.com/rebeccajohnson88/qss20_s21_proj/blob/main/code/15_viz_modelingoutputs.R)
+  - Takes in: all .csv from script 14_mlmodeling_eval.py
+  - What it does: creates visualizations of outputs from the predicative models on WHD data
+
+- [16_mlmodeling_featureimportances.py](https://github.com/rebeccajohnson88/qss20_s21_proj/blob/main/code/16_mlmodeling_featureimportances.py)
+  - Takes in: train and test split of WHD data
+  - What it does: run specifically two models, shallow GradientBossting() and logistic regression and evaluate the performance of trained models on prediction, including confusion matrices
+  - Output: none
+
+- [17_mlmodeling_eval_trla.py](https://github.com/rebeccajohnson88/qss20_s21_proj/blob/main/code/17_mlmodeling_eval_trla.py)
+  - Takes in: train and test split of TRLA-WHD data
+  - What it does: run machine learning models, focussing on whether the outcome variable is intersect of TRLA/WHD, or one of them, or none; and evaluate the performance of trained models on prediction, including confusion matrices
+  - Output: .csv of evalutation results, confusion matrices, predictions on test data of the models
+
+- [18_viz_modelingoutputs_trla.R](https://github.com/rebeccajohnson88/qss20_s21_proj/blob/main/code/18_viz_modelingoutputs_trla.R)
+  - Takes in: all .csv from script 17_mlmodeling_eval_trla.py
+  - What it does: visualizes outputs from models and predictions on TRLA on WHD vilation data
+
+- [19_visualize_investigations.ipynb](https://github.com/rebeccajohnson88/qss20_s21_proj/blob/main/code/19_visualize_investigations.ipynb)
+  - Takes in: trac shape files and investigation data from TRLA on WHD violations
+  - What it does: visualizes shaded maps with investigation locations
+
+- [20_textanalysis_addendums.Rmd](https://github.com/rebeccajohnson88/qss20_s21_proj/blob/main/code/20_textanalysis_addendums.Rmd)
+  - Takes in: job disclosure data and investigation data of TRLA on WHD violations
+  - What it does: text analysis and topic matching on the disclosure data
+  - Output: html_document of analysis result
 
 ## Directory structure
 
