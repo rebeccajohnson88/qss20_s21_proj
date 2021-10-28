@@ -218,7 +218,7 @@ trla_v_WHD_long <- melt(trla_v_WHD, id.vars = "year_for_plotting")
 trla_v_WHD_long %>%
   ggplot(aes(x = year_for_plotting, y = value, fill = variable)) +
   geom_col(position = "dodge") +
-  geom_label(aes(label=value), color="black", fill = "white" size=3.5, position = position_dodge(width = 1))+
+  geom_label(aes(label=value), color="black", fill = "white", size=3.5, position = position_dodge(width = 1))+
   theme_DOL() +
   labs(x = "Year", y = "Number of Employers\n(restricted to 7 TRLA\ncatchment states)",
        fill = "") +
@@ -249,7 +249,7 @@ trla_v_WHD_plot_long %>%
            variable != "unique_employers_without_investigations") %>%
   ggplot(aes(x = year_for_plotting, y = value*100, fill = variable)) +
   geom_col(position = "dodge", color = "black") +
-  geom_label(aes(label=round(value*100, digits = 1)), color="black", fill = "white" size=3.5, position = position_dodge(width = 1))+
+  geom_label(aes(label=round(value*100, digits = 1)), color="black", fill = "white", size=3.5, position = position_dodge(width = 1))+
   theme_DOL() +
   labs(x = "Year", y = "Percent of Unique Employers\n(restricted to 7 TRLA\ncatchment states)", fill = "") +
   scale_fill_manual(values = c(as.character(color_guide["WHD investigations"]),
