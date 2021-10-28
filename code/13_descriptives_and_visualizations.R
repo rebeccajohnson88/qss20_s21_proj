@@ -218,7 +218,7 @@ trla_v_WHD_long <- melt(trla_v_WHD, id.vars = "year_for_plotting")
 trla_v_WHD_long %>%
   ggplot(aes(x = year_for_plotting, y = value, fill = variable)) +
   geom_col(position = "dodge") +
-  geom_label(aes(label=value), color="black", size=3.5, position = position_dodge(width = 1))+
+  geom_label(aes(label=value), color="black", fill = "white" size=3.5, position = position_dodge(width = 1))+
   theme_DOL() +
   labs(x = "Year", y = "Number of Employers\n(restricted to 7 TRLA\ncatchment states)",
        fill = "") +
@@ -249,7 +249,7 @@ trla_v_WHD_plot_long %>%
            variable != "unique_employers_without_investigations") %>%
   ggplot(aes(x = year_for_plotting, y = value*100, fill = variable)) +
   geom_col(position = "dodge", color = "black") +
-  geom_label(aes(label=round(value*100, digits = 1)), color="black", size=3.5, position = position_dodge(width = 1))+
+  geom_label(aes(label=round(value*100, digits = 1)), color="black", fill = "white" size=3.5, position = position_dodge(width = 1))+
   theme_DOL() +
   labs(x = "Year", y = "Percent of Unique Employers\n(restricted to 7 TRLA\ncatchment states)", fill = "") +
   scale_fill_manual(values = c(as.character(color_guide["WHD investigations"]),
@@ -384,6 +384,7 @@ attorney_rep_top_trla %>%
                          value), y = value*100, 
              fill = which_rate)) +
   geom_col(position = "dodge", color = "black") +
+  geom_label(aes(label=round(value*100, digits = 1)), color="black", fill = "white", size=3.5, position = position_dodge(width = 1))+
   theme_DOL() +
   labs(x = "Attorney/agent on application", y = "Percent of employers they represent\nwith investigation\n(TRLA catchment states only)") +
   coord_flip() +
@@ -426,6 +427,7 @@ attorney_highrate_viol %>%
                          perc_investigations_viol), y = perc_investigations_viol*100, 
              fill = trla_intake_call)) +
   geom_col(position = "dodge", color = "black") +
+  geom_label(aes(label=round(perc_investigations_viol*100, digits = 1)), color="black", fill = "white", size=3.5, position = position_dodge(width = 1))+
   theme_DOL() +
   labs(x = "Attorney/agent on application", y = "Of employers investigated,\n% with 1+ WHD-found violation") +
   coord_flip() +
@@ -478,12 +480,23 @@ trla_v_WHD_soc = trla_data_wtitle %>%
          soc_wrapped = str_wrap(soc_summarized, width = 15)) 
 
 #
+
+# adjust the soc code that got messed up
+trla_v_WHD_soc <- trla_v_WHD_soc %>%
+  mutate(soc_wrapped = ifelse(soc_wrapped == "Farmworkers and\nLaborers, Crop,\nNursery, and", "Farmworkers and\nLaborers, Crop,\nNursery, and\nGreenhouse", soc_wrapped))
+
+# check and make sure this worked
+trla_v_WHD_soc %>%
+  select(soc_wrapped)
+
+# Now the plot
 ggplot(trla_v_WHD_soc %>%
          filter(outcome_compare_TRLA_WHD %in% c("TRLA; not WHD", 
                                                 "WHD; not TRLA")),
        aes(x = soc_wrapped, y = soc_prop, fill = outcome_compare_TRLA_WHD)) +
   geom_bar(stat = "identity", position = "dodge", 
            color = "black") +
+  geom_label(aes(label=round(soc_prop, digits = 2)), color="black", fill = "white", size=3.5, position = position_dodge(width = 1)) +
   coord_flip() +
   theme_DOL() +
   labs(fill = "") +
@@ -493,5 +506,7 @@ ggplot(trla_v_WHD_soc %>%
   scale_fill_manual(values = c("TRLA; not WHD" = as.character(color_guide["TRLA intake"]),
                                "WHD; not TRLA" = as.character(color_guide["WHD investigations"])))
 
+# still have an overlapping label!
 
-ggsave(here("output/figs", "soc_code_compare.pdf"), width = 12, height = 8)t/figs", "soc_code_compare.pdf"), width = 12, height = 8)
+
+ggsave(here("output/figs", "soc_code_compare.pdf"), width = 12, height = 8)
