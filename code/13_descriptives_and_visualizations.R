@@ -17,7 +17,7 @@ library(stringr)
 
 RUN_FROM_CONSOLE = FALSE
 if(RUN_FROM_CONSOLE){
- args <- commandArgs(TRUE)
+  args <- commandArgs(TRUE)
   DATA_DIR = args[1]
 } else{
   #DATA_DIR = "~/Dropbox (Dartmouth College)/qss20_finalproj_rawdata/summerwork"
@@ -33,13 +33,13 @@ if(RUN_FROM_CONSOLE){
 
 # trla_file
 trla_data <- read.csv(sprintf("%s/%s", 
-            DATA_DIR, 
-            "clean/whd_violations_wTRLA_catchmentonly.csv"))
+                              DATA_DIR, 
+                              "clean/whd_violations_wTRLA_catchmentonly.csv"))
 
 # general file
 general_data <- read.csv(sprintf("%s/%s", 
-              DATA_DIR, 
-            "clean/whd_violations.csv"))
+                                 DATA_DIR, 
+                                 "clean/whd_violations.csv"))
 
 ###################
 # Visualizations
@@ -68,10 +68,10 @@ theme_DOL <- function(base_size = 24){
 
 # custom palette
 color_guide = c("jobs" = "#1B9E77", 
-               "WHD investigations" = "#D95F02", 
-               "WHD violations" = "#7570B3",
-               "TRLA intake" = "#E6AB02",
-               "Both WHD TRLA" = "#A6761D")
+                "WHD investigations" = "#D95F02", 
+                "WHD violations" = "#7570B3",
+                "TRLA intake" = "#E6AB02",
+                "Both WHD TRLA" = "#A6761D")
 
 # visualization 1: By year or by month-year, plotting the # of unique employers with jobs, # of unique employers with WHD investigations, # of unique employers with violations (using the overlap version of the outcome)
 
@@ -127,7 +127,7 @@ n_by_year_long %>%
                                color_guide["WHD investigations"],
                                color_guide["WHD violations"]),
                     labels = c("Unique Employers with Jobs", "Unique Employers with WHD Investigation", 
-                                                    "Unique Employers with Violation")) +
+                               "Unique Employers with Violation")) +
   guides(fill = guide_legend(nrow = 2))
 
 
@@ -147,7 +147,7 @@ n_by_year_long %>%
   scale_fill_manual(values = c(as.character(color_guide["jobs"]),
                                color_guide["WHD investigations"],
                                color_guide["WHD violations"]), labels = c("Job Applications (repeated across employers)", "Job Applications with WHD Investigations", 
-                                                    "Job Applications with Violation")) +
+                                                                          "Job Applications with Violation")) +
   guides(fill = guide_legend(nrow = 2))
 
 
@@ -197,7 +197,7 @@ n_by_year_trla_long %>%
   labs(x = "Year", y = "Number of Employers\n(restricted to 7 TRLA\ncatchment states)", fill = "") +
   scale_fill_manual(values = c(as.character(color_guide["jobs"]),
                                color_guide["TRLA intake"]), labels = c("Unique Employers", 
-                                        "Unique Employers with TRLA intake call")) +
+                                                                       "Unique Employers with TRLA intake call")) +
   theme(legend.position = "bottom") +
   scale_y_continuous(breaks = pretty_breaks(n = 10)) 
 
@@ -218,6 +218,7 @@ trla_v_WHD_long <- melt(trla_v_WHD, id.vars = "year_for_plotting")
 trla_v_WHD_long %>%
   ggplot(aes(x = year_for_plotting, y = value, fill = variable)) +
   geom_col(position = "dodge") +
+  geom_label(aes(label=value), color="black", size=3.5, position = position_dodge(width = 1))+
   theme_DOL() +
   labs(x = "Year", y = "Number of Employers\n(restricted to 7 TRLA\ncatchment states)",
        fill = "") +
@@ -245,9 +246,10 @@ trla_v_WHD_plot_long <- melt(trla_v_WHD_plot, id.vars = "year_for_plotting")
 # now the plot
 trla_v_WHD_plot_long %>%
   filter(variable != "unique_employers" &
-        variable != "unique_employers_without_investigations") %>%
+           variable != "unique_employers_without_investigations") %>%
   ggplot(aes(x = year_for_plotting, y = value*100, fill = variable)) +
   geom_col(position = "dodge", color = "black") +
+  geom_label(aes(label=round(value*100, digits = 1)), color="black", size=3.5, position = position_dodge(width = 1))+
   theme_DOL() +
   labs(x = "Year", y = "Percent of Unique Employers\n(restricted to 7 TRLA\ncatchment states)", fill = "") +
   scale_fill_manual(values = c(as.character(color_guide["WHD investigations"]),
@@ -293,31 +295,31 @@ general_data <- general_data %>%
 
 # group by unique employers and whether investigation
 attorney_rep = general_data %>%
-                group_by(ATTORNEY_AGENT_NAME_CLEANED) %>%
-                summarise(n_employers = n_distinct(jobs_group_id)) %>%
-               ungroup() %>%
-            left_join(general_data %>%
-                    filter(outcome_is_investigation_overlapsd) %>%
-                    group_by(ATTORNEY_AGENT_NAME_CLEANED) %>%
-                        summarise(n_investigated = n_distinct(jobs_group_id)) %>%
-                        ungroup()) %>% 
-        mutate(investigated_prop_employers = ifelse(is.na(n_investigated), 0,
-                                                    n_investigated/n_employers)) %>%
-        arrange(desc(investigated_prop_employers))
+  group_by(ATTORNEY_AGENT_NAME_CLEANED) %>%
+  summarise(n_employers = n_distinct(jobs_group_id)) %>%
+  ungroup() %>%
+  left_join(general_data %>%
+              filter(outcome_is_investigation_overlapsd) %>%
+              group_by(ATTORNEY_AGENT_NAME_CLEANED) %>%
+              summarise(n_investigated = n_distinct(jobs_group_id)) %>%
+              ungroup()) %>% 
+  mutate(investigated_prop_employers = ifelse(is.na(n_investigated), 0,
+                                              n_investigated/n_employers)) %>%
+  arrange(desc(investigated_prop_employers))
 
 ## first plot dist of n employers
 sum(attorney_rep$n_employers >= 10, na.rm = TRUE)
 
 #to plot: for those with at least 5 employers, ratio
 attorney_rep_top = attorney_rep %>% filter(n_employers >= 10) %>% arrange(desc(investigated_prop_employers)) %>%
-        slice(1:15) 
+  slice(1:15) 
 
 # new articles: https://account.miamiherald.com/paywall/subscriber-only?resume=238404323&intcid=ab_archive
 
 # now the plot (investigations)
 attorney_rep_top %>%
   ggplot(aes(x = reorder(ATTORNEY_AGENT_NAME_CLEANED,
-                      investigated_prop_employers), y = investigated_prop_employers*100, 
+                         investigated_prop_employers), y = investigated_prop_employers*100, 
              fill = investigated_prop_employers)) +
   geom_col(position = "dodge", color = "black") +
   theme_DOL() +
@@ -326,7 +328,7 @@ attorney_rep_top %>%
   guides(fill = FALSE) +
   theme(axis.text.x = element_text(size = 12, angle = 90)) +
   geom_label(aes(x = reorder(ATTORNEY_AGENT_NAME_CLEANED,
-                  investigated_prop_employers), y = investigated_prop_employers*100,
+                             investigated_prop_employers), y = investigated_prop_employers*100,
                  label = round(n_employers)),
              fill = "white") 
 
@@ -358,21 +360,21 @@ attorney_rep_trla = trla_data %>%
   mutate(investigated_prop_employers = ifelse(is.na(n_investigated), 0,
                                               n_investigated/n_employers),
          investigated_prop_employers_trla = ifelse(is.na(n_investigated_trla), 0,
-                                              n_investigated_trla/n_employers),
+                                                   n_investigated_trla/n_employers),
          some_investigations_both = ifelse(investigated_prop_employers > 0 &
-                                          investigated_prop_employers_trla > 0, 
-                                          TRUE, FALSE)) %>%
+                                             investigated_prop_employers_trla > 0, 
+                                           TRUE, FALSE)) %>%
   arrange(desc(investigated_prop_employers))
 
 attorney_rep_top_trla = attorney_rep_trla %>% filter(some_investigations_both & n_employers >= 10 &
-                                                investigated_prop_employers >= 0.05) %>%
-                    select(ATTORNEY_AGENT_NAME_CLEANED, investigated_prop_employers,
-                           investigated_prop_employers_trla) %>%
-                    reshape2::melt(, id.vars = c("ATTORNEY_AGENT_NAME_CLEANED")) %>%
-                    mutate(which_rate = ifelse(grepl("prop_employers_trla", variable),
-                                               "TRLA",
-                                               "WHD")) 
-          
+                                                       investigated_prop_employers >= 0.05) %>%
+  select(ATTORNEY_AGENT_NAME_CLEANED, investigated_prop_employers,
+         investigated_prop_employers_trla) %>%
+  reshape2::melt(, id.vars = c("ATTORNEY_AGENT_NAME_CLEANED")) %>%
+  mutate(which_rate = ifelse(grepl("prop_employers_trla", variable),
+                             "TRLA",
+                             "WHD")) 
+
 
 # new articles: https://account.miamiherald.com/paywall/subscriber-only?resume=238404323&intcid=ab_archive
 
@@ -386,7 +388,7 @@ attorney_rep_top_trla %>%
   labs(x = "Attorney/agent on application", y = "Percent of employers they represent\nwith investigation\n(TRLA catchment states only)") +
   coord_flip() +
   scale_fill_manual(values = c(as.character(color_guide["WHD investigations"]), 
-                              color_guide["TRLA intake"]),
+                               color_guide["TRLA intake"]),
                     labels = c("WHD investigation",
                                "TRLA intake")) +
   theme(axis.text.x = element_text(size = 12, angle = 90),
@@ -417,7 +419,7 @@ attorney_highrate_viol = trla_data %>%
          trla_intake_call = ifelse(is.na(n_investigated_trla), FALSE,
                                    TRUE)) %>%
   arrange(desc(perc_investigations_viol))
-  
+
 attorney_highrate_viol %>%
   filter(n_investigated >= 2 & ATTORNEY_AGENT_NAME_CLEANED != "Missing") %>%
   ggplot(aes(x = reorder(ATTORNEY_AGENT_NAME_CLEANED,
@@ -445,41 +447,41 @@ ggsave(here("output/figs", "attorney_highviol_TRLAstates.pdf"), width = 12, heig
 
 ## create new 6 digit soc code
 trla_data = trla_data %>%
-        mutate(soc_code_6dig = gsub("\\..*", "", SOC_CODE)) 
+  mutate(soc_code_6dig = gsub("\\..*", "", SOC_CODE)) 
 
 ## summarized titles
 trla_data_wtitle = trla_data %>%
-        group_by(soc_code_6dig, SOC_TITLE) %>%
-        summarise(count_titles = n()) %>%
-        filter(count_titles == max(count_titles)) %>%
-        rename(soc_title_consolidated = SOC_TITLE) %>%
-        right_join(trla_data, by = "soc_code_6dig")
+  group_by(soc_code_6dig, SOC_TITLE) %>%
+  summarise(count_titles = n()) %>%
+  filter(count_titles == max(count_titles)) %>%
+  rename(soc_title_consolidated = SOC_TITLE) %>%
+  right_join(trla_data, by = "soc_code_6dig")
 
 ## code consolidated
 trla_v_WHD_soc = trla_data_wtitle %>%
-        mutate(soc_summarized = ifelse(soc_code_6dig %in% c("45-2091", 
-                                                            "45-2092",
-                                                            "45-2093"), soc_title_consolidated, 
-                                       "Other")) %>%
-        group_by(soc_summarized, outcome_compare_TRLA_WHD) %>%
-        summarise(soc_num = n_distinct(jobs_row_id)) %>%
-        ungroup() %>%
-        left_join(trla_data_wtitle %>%
-                    mutate(soc_summarized = ifelse(soc_code_6dig %in% c("45-2091", 
-                                                                        "45-2092",
-                                                                        "45-2093"), soc_title_consolidated, 
-                                                   "Other")) %>%
-                    group_by(outcome_compare_TRLA_WHD) %>%
-                    summarise(soc_denom = n_distinct(jobs_row_id)) %>%
-                    ungroup()) %>%
-        mutate(soc_prop = soc_num/soc_denom,
-               soc_wrapped = str_wrap(soc_summarized, width = 15)) 
+  mutate(soc_summarized = ifelse(soc_code_6dig %in% c("45-2091", 
+                                                      "45-2092",
+                                                      "45-2093"), soc_title_consolidated, 
+                                 "Other")) %>%
+  group_by(soc_summarized, outcome_compare_TRLA_WHD) %>%
+  summarise(soc_num = n_distinct(jobs_row_id)) %>%
+  ungroup() %>%
+  left_join(trla_data_wtitle %>%
+              mutate(soc_summarized = ifelse(soc_code_6dig %in% c("45-2091", 
+                                                                  "45-2092",
+                                                                  "45-2093"), soc_title_consolidated, 
+                                             "Other")) %>%
+              group_by(outcome_compare_TRLA_WHD) %>%
+              summarise(soc_denom = n_distinct(jobs_row_id)) %>%
+              ungroup()) %>%
+  mutate(soc_prop = soc_num/soc_denom,
+         soc_wrapped = str_wrap(soc_summarized, width = 15)) 
 
 #
 ggplot(trla_v_WHD_soc %>%
-      filter(outcome_compare_TRLA_WHD %in% c("TRLA; not WHD", 
-                                             "WHD; not TRLA")),
-      aes(x = soc_wrapped, y = soc_prop, fill = outcome_compare_TRLA_WHD)) +
+         filter(outcome_compare_TRLA_WHD %in% c("TRLA; not WHD", 
+                                                "WHD; not TRLA")),
+       aes(x = soc_wrapped, y = soc_prop, fill = outcome_compare_TRLA_WHD)) +
   geom_bar(stat = "identity", position = "dodge", 
            color = "black") +
   coord_flip() +
@@ -492,4 +494,4 @@ ggplot(trla_v_WHD_soc %>%
                                "WHD; not TRLA" = as.character(color_guide["WHD investigations"])))
 
 
-ggsave(here("output/figs", "soc_code_compare.pdf"), width = 12, height = 8)
+ggsave(here("output/figs", "soc_code_compare.pdf"), width = 12, height = 8)t/figs", "soc_code_compare.pdf"), width = 12, height = 8)
