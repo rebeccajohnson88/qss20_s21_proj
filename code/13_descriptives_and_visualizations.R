@@ -20,8 +20,8 @@ if(RUN_FROM_CONSOLE){
   args <- commandArgs(TRUE)
   DATA_DIR = args[1]
 } else{
-  #DATA_DIR = "~/Dropbox (Dartmouth College)/qss20_finalproj_rawdata/summerwork"
-  DATA_DIR = "~/Dropbox/qss20_finalproj_rawdata/summerwork"
+  DATA_DIR = "~/Dropbox (Dartmouth College)/qss20_finalproj_rawdata/summerwork"
+  #DATA_DIR = "~/Dropbox/qss20_finalproj_rawdata/summerwork"
 }
 
 
@@ -120,6 +120,7 @@ n_by_year_long %>%
   filter(grepl("employers", variable)) %>%
   ggplot(aes(x = year_for_plotting, y = value, fill = variable)) +
   geom_col(position = "dodge", color = "black") +
+  geom_label(aes(label=value, group=variable), color="black", fill = "white", size=3.5, position = position_dodge(width = .9))+
   theme_DOL() +
   labs(x = "Calendar Year", y = "Number of Employers", fill = "") +
   theme(legend.position = "bottom") +
@@ -136,11 +137,13 @@ ggsave(here("output/figs", "barplot_unique_emp_by_year.pdf"),
        device = "pdf",
        width = 12, height = 8)
 
+
 ## repeat but at level of jobs rather than employers
 n_by_year_long %>%
   filter(grepl("jobs", variable)) %>%
   ggplot(aes(x = year_for_plotting, y = value, fill = variable)) +
   geom_col(position = "dodge", color = "black") +
+  geom_label(aes(label=value, group=variable), color="black", fill = "white", size=3.5, position = position_dodge(width = .9))+
   theme_DOL() +
   labs(x = "Calendar Year", y = "Number of Employers", fill = "") +
   theme(legend.position = "bottom") +
@@ -193,6 +196,7 @@ n_by_year_trla_long %>%
   filter(grepl("employers", variable)) %>%
   ggplot(aes(x = year_for_plotting, y = value, fill = variable)) +
   geom_col(position = "dodge", color = "black") +
+  geom_label(aes(label=value, group=variable), color="black", fill = "white", size=3.5, position = position_dodge(width = .9))+
   theme_DOL() +
   labs(x = "Year", y = "Number of Employers\n(restricted to 7 TRLA\ncatchment states)", fill = "") +
   scale_fill_manual(values = c(as.character(color_guide["jobs"]),
@@ -218,7 +222,7 @@ trla_v_WHD_long <- melt(trla_v_WHD, id.vars = "year_for_plotting")
 trla_v_WHD_long %>%
   ggplot(aes(x = year_for_plotting, y = value, fill = variable)) +
   geom_col(position = "dodge") +
-  geom_label(aes(label=value), color="black", fill = "white", size=3.5, position = position_dodge(width = 1))+
+  geom_label(aes(label=value, group=variable), color="black", fill = "white", size=3.5, position = position_dodge(width = .9))+
   theme_DOL() +
   labs(x = "Year", y = "Number of Employers\n(restricted to 7 TRLA\ncatchment states)",
        fill = "") +
@@ -249,7 +253,7 @@ trla_v_WHD_plot_long %>%
            variable != "unique_employers_without_investigations") %>%
   ggplot(aes(x = year_for_plotting, y = value*100, fill = variable)) +
   geom_col(position = "dodge", color = "black") +
-  geom_label(aes(label=round(value*100, digits = 1)), color="black", fill = "white", size=3.5, position = position_dodge(width = 1))+
+  geom_label(aes(label=round(value*100, digits = 1), group=variable), color="black", fill = "white", size=3.5, position = position_dodge(width = .9))+
   theme_DOL() +
   labs(x = "Year", y = "Percent of Unique Employers\n(restricted to 7 TRLA\ncatchment states)", fill = "") +
   scale_fill_manual(values = c(as.character(color_guide["WHD investigations"]),
@@ -384,7 +388,7 @@ attorney_rep_top_trla %>%
                          value), y = value*100, 
              fill = which_rate)) +
   geom_col(position = "dodge", color = "black") +
-  geom_label(aes(label=round(value*100, digits = 1)), color="black", fill = "white", size=3.5, position = position_dodge(width = 1))+
+  geom_label(aes(label=round(value*100, digits = 1), group=which_rate), color="black", fill = "white", size=3.5, position = position_dodge(width = 1))+
   theme_DOL() +
   labs(x = "Attorney/agent on application", y = "Percent of employers they represent\nwith investigation\n(TRLA catchment states only)") +
   coord_flip() +
@@ -496,7 +500,7 @@ ggplot(trla_v_WHD_soc %>%
        aes(x = soc_wrapped, y = soc_prop, fill = outcome_compare_TRLA_WHD)) +
   geom_bar(stat = "identity", position = "dodge", 
            color = "black") +
-  geom_label(aes(label=round(soc_prop, digits = 2)), color="black", fill = "white", size=3.5, position = position_dodge(width = 1)) +
+  geom_label(aes(label=round(soc_prop, digits = 2), group=outcome_compare_TRLA_WHD), color="black", fill = "white", size=3.5, position = position_dodge(width = 1)) +
   coord_flip() +
   theme_DOL() +
   labs(fill = "") +
@@ -506,7 +510,6 @@ ggplot(trla_v_WHD_soc %>%
   scale_fill_manual(values = c("TRLA; not WHD" = as.character(color_guide["TRLA intake"]),
                                "WHD; not TRLA" = as.character(color_guide["WHD investigations"])))
 
-# still have an overlapping label!
 
 
 ggsave(here("output/figs", "soc_code_compare.pdf"), width = 12, height = 8)
