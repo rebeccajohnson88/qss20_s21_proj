@@ -113,7 +113,7 @@ n_by_year <- general_data %>%
             unique_jobs_with_violations = n_distinct(jobs_row_id[outcome_is_investigation_overlapsd == TRUE]))
 
 # convert to tall format so we can plot all 3
-n_by_year_long <- melt(n_by_year, id.vars = "year_for_plotting")
+n_by_year_long <- reshape2::melt(n_by_year, id.vars = "year_for_plotting")
 
 # now the plot
 n_by_year_long %>%
@@ -189,7 +189,7 @@ n_by_year_trla <- trla_data %>%
             unique_jobs_with_trla_investigations = n_distinct(jobs_row_id[outcome_is_investigation_overlapsd_trla == TRUE]))
 
 # convert to tall format so we can plot both
-n_by_year_trla_long <- melt(n_by_year_trla, id.vars = "year_for_plotting")
+n_by_year_trla_long <- reshape2::melt(n_by_year_trla, id.vars = "year_for_plotting")
 
 # now the plot
 n_by_year_trla_long %>%
@@ -208,6 +208,7 @@ n_by_year_trla_long %>%
 ggsave(here("output/figs", "barplot_unique_emp_by_year_trla.pdf"), width = 12, height = 8)
 
 # plot 3: Something with overlap of those two
+
 trla_v_WHD <- trla_data %>%
   group_by(year_for_plotting) %>%
   summarize(unique_employers_without_investigations = n_distinct(jobs_group_id[outcome_compare_TRLA_WHD == "Neither WHD nor TRLA"]),
@@ -216,7 +217,7 @@ trla_v_WHD <- trla_data %>%
             unique_employers_with_both_investigations = n_distinct(jobs_group_id[outcome_compare_TRLA_WHD == "Both TRLA and WHD"]))
 
 # convert to tall format so we can plot all 4
-trla_v_WHD_long <- melt(trla_v_WHD, id.vars = "year_for_plotting")
+trla_v_WHD_long <- reshape2::melt(trla_v_WHD, id.vars = "year_for_plotting")
 
 # now the plot
 trla_v_WHD_long %>%
@@ -234,6 +235,8 @@ trla_v_WHD_long %>%
   theme(legend.position = "bottom") +
   guides(fill = guide_legend(ncol = 2)) 
 
+####### Seems like I should be clearer with the above labels #########
+
 ggsave(here("output/figs", "trla_v_whd_counts.pdf"), width = 12, height = 8)
 
 # plot 3.5 for proportions instead of counts
@@ -245,7 +248,9 @@ trla_v_WHD_plot <- trla_data %>%
             unique_employers_with_trla_investigations = n_distinct(jobs_group_id[outcome_compare_TRLA_WHD == "TRLA; not WHD"])/unique_employers,
             unique_employers_with_both_investigations = n_distinct(jobs_group_id[outcome_compare_TRLA_WHD == "Both TRLA and WHD"])/unique_employers)
 
-trla_v_WHD_plot_long <- melt(trla_v_WHD_plot, id.vars = "year_for_plotting")
+trla_v_WHD_plot_long <- reshape2::melt(trla_v_WHD_plot, id.vars = "year_for_plotting")
+
+###### should probably be more explicit with these labels too (i.e., WHD and not TRLA, TRLA and not WHD)
 
 # now the plot
 trla_v_WHD_plot_long %>%
@@ -334,9 +339,9 @@ attorney_rep_top %>%
   geom_label(aes(x = reorder(ATTORNEY_AGENT_NAME_CLEANED,
                              investigated_prop_employers), y = investigated_prop_employers*100,
                  label = round(n_employers)),
-             fill = "white") 
+             fill = "white", label.padding = unit(.5, "lines"), label.size = .5)
 
-ggsave(here("output/figs", "attorney_highriskWHD.pdf"), width = 12, height = 8)
+ggsave(here("/Users/camguage/Dropbox (Dartmouth College)/qss20_finalproj_rawdata/summerwork" , "output/figs", "attorney_highriskWHD.pdf"), width = 12, height = 8)
 
 ## repeat for TRLA states
 ## clean attorney name and find high risk 
@@ -372,8 +377,8 @@ attorney_rep_trla = trla_data %>%
 
 attorney_rep_top_trla = attorney_rep_trla %>% filter(some_investigations_both & n_employers >= 10 &
                                                        investigated_prop_employers >= 0.05) %>%
-  select(ATTORNEY_AGENT_NAME_CLEANED, investigated_prop_employers,
-         investigated_prop_employers_trla) %>%
+  #select(ATTORNEY_AGENT_NAME_CLEANED, investigated_prop_employers,
+         #investigated_prop_employers_trla) %>%
   reshape2::melt(, id.vars = c("ATTORNEY_AGENT_NAME_CLEANED")) %>%
   mutate(which_rate = ifelse(grepl("prop_employers_trla", variable),
                              "TRLA",
@@ -506,10 +511,124 @@ ggplot(trla_v_WHD_soc %>%
   labs(fill = "") +
   theme(legend.position = c(0.8, 0.8)) +
   xlab("") +
-  ylab("Proportion of employers in that investigation category") +
+  ylab("Proportion of employers in that investigation category\n(employers in that investigation category/all employers)") +
   scale_fill_manual(values = c("TRLA; not WHD" = as.character(color_guide["TRLA intake"]),
                                "WHD; not TRLA" = as.character(color_guide["WHD investigations"])))
 
 
 
-ggsave(here("output/figs", "soc_code_compare.pdf"), width = 12, height = 8)
+ggsave(here("/Users/camguage/Dropbox (Dartmouth College)/qss20_finalproj_rawdata/summerwork" , "output/figs", "soc_code_compare.pdf"), width = 12, height = 8)
+
+
+############### COVID FIGS #####################
+
+general_data <- general_data %>%
+  mutate(JOB_START_DATE = ymd(JOB_START_DATE))
+
+# extract the year for plotting
+general_data <- general_data %>%
+  mutate(year_for_plotting = year(JOB_START_DATE),
+         month_year_for_plotting = floor_date(JOB_START_DATE, "month"))
+
+##########################
+# Over-time plots during COVID (so no filtering)
+##########################
+
+covid_patterns = general_data %>% filter(year_for_plotting >= 2019 &
+                                           year_for_plotting < 2021)
+
+covid_agg = covid_patterns %>%
+  group_by(month_year_for_plotting) %>%
+  summarise(unique_emp = length(unique(jobs_group_id)),
+            unique_employers_with_investigations = n_distinct(jobs_group_id[outcome_is_investigation_overlapsd == TRUE]),
+            unique_employers_with_violations = n_distinct(jobs_group_id[outcome_is_viol_overlapsd == TRUE])) %>%
+  ungroup() %>%
+  reshape2::melt(, id.var = "month_year_for_plotting") %>%
+  mutate(my_pos = as.POSIXct(month_year_for_plotting,
+                             format = "%Y-%m-%d"))
+
+### add shading
+ggplot(covid_agg %>% filter(!grepl("violation", variable)), 
+       aes(x = my_pos, y = value, group = variable, fill = variable)) +
+  geom_bar(stat = "identity") +
+  theme_DOL() +
+  theme(axis.text.x = element_text(angle = 90, size = 10), 
+        legend.position = c(0.15, 0.6),
+        strip.text = element_blank()) +
+  xlab("Month and year of job start date\n(rounded to month)") +
+  ylab("Count unique employers") +
+  scale_x_datetime(date_breaks = "2 months", labels = date_format("%b-%Y")) +
+  scale_y_continuous(breaks = pretty_breaks(n = 10)) +
+  scale_fill_manual(values = c("unique_emp" = as.character(color_guide["jobs"]),
+                               "unique_employers_with_investigations" = 
+                                 as.character(color_guide['WHD investigations'])),
+                    labels = 
+                      c("unique_emp" = "Job orders",
+                        "unique_employers_with_investigations" = "Investigations"))  +
+  labs(fill = "") +
+  geom_rect(aes(xmin= as.POSIXct('2020-03-01'),
+                xmax = as.POSIXct('2020-12-31'),
+                ymin = -Inf,
+                ymax = Inf), fill = 'tomato1', alpha = 0.01,
+            color = "white") +
+  facet_wrap(~variable, scales = "free") 
+
+ggsave(here("/Users/camguage/Dropbox (Dartmouth College)/qss20_finalproj_rawdata/summerwork", "output/figs", "covid_focus_WHD.pdf"), 
+       plot = last_plot(), 
+       device = "pdf",
+       width = 12, height = 8)
+
+
+
+# put the relevant date column in a cleaner date format
+trla_data <- trla_data %>%
+  mutate(JOB_START_DATE = ymd(JOB_START_DATE))
+
+# extract the year for plotting
+trla_data <- trla_data %>%
+  mutate(year_for_plotting = year(JOB_START_DATE),
+         month_year_for_plotting = floor_date(JOB_START_DATE, "month"))
+
+### covid over-time pre filtering
+covid_patterns_tr = trla_data %>% filter(year_for_plotting >= 2019 &
+                                           year_for_plotting < 2021)
+
+covid_agg_tr = covid_patterns_tr %>%
+  group_by(month_year_for_plotting) %>%
+  summarise(unique_emp = length(unique(jobs_row_id)),
+            unique_employers_with_investigations = n_distinct(jobs_row_id[outcome_is_investigation_overlapsd_trla == TRUE])) %>%
+  ungroup() %>%
+  reshape2::melt(, id.var = "month_year_for_plotting") %>%
+  mutate(my_pos = as.POSIXct(month_year_for_plotting,
+                             format = "%Y-%m-%d"))
+
+### add shading
+ggplot(covid_agg_tr %>% filter(!grepl("violation", variable)), 
+       aes(x = my_pos, y = value, group = variable, fill = variable)) +
+  geom_bar(stat = "identity") +
+  theme_DOL() +
+  theme(axis.text.x = element_text(angle = 90, size = 10), 
+        legend.position = c(0.15, 0.9),
+        strip.text = element_blank()) +
+  xlab("Month and year of job start date\n(rounded to month)") +
+  ylab("Count unique employers") +
+  scale_x_datetime(date_breaks = "2 months", labels = date_format("%b-%Y")) +
+  scale_y_continuous(breaks = pretty_breaks(n = 10)) +
+  scale_fill_manual(values = c("unique_emp" = as.character(color_guide["jobs"]),
+                               "unique_employers_with_investigations" = 
+                                 as.character(color_guide['WHD investigations'])),
+                    labels = 
+                      c("unique_emp" = "Job orders",
+                        "unique_employers_with_investigations" = "Investigations"))  +
+  labs(fill = "") +
+  geom_rect(aes(xmin= as.POSIXct('2020-03-01'),
+                xmax = as.POSIXct('2020-12-31'),
+                ymin = -Inf,
+                ymax = Inf), fill = 'tomato1', alpha = 0.01,
+            color = "white") +
+  facet_wrap(~variable, scales = "free") 
+
+ggsave(here("/Users/camguage/Dropbox (Dartmouth College)/qss20_finalproj_rawdata/summerwork", "output/figs", "covid_focus_trla.pdf"), 
+       plot = last_plot(), 
+       device = "pdf",
+       width = 12, height = 8)
